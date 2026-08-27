@@ -8,8 +8,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Identity.Service.Services;
 
-public class UserService(IdentityDbContext dbContext, IMapper mapper) : IUserService
+public class UserService(IdentityDbContext dbContext, IMapper mapper, IPasswordHasher? passwordHasher = null) : IUserService
 {
+    private readonly IPasswordHasher passwordHasher = passwordHasher ?? new PasswordHasher();
+
     public async Task<UserResponse> CreateAsync(CreateUserRequest request, CancellationToken cancellationToken = default)
     {
         await ValidateReferencesAsync(request.RoleId, request.DepartmentId, cancellationToken);
@@ -18,6 +20,7 @@ public class UserService(IdentityDbContext dbContext, IMapper mapper) : IUserSer
         var user = mapper.Map<User>(request);
         user.Id = Guid.NewGuid();
         user.Email = request.Email.Trim().ToLowerInvariant();
+        user.PasswordHash = passwordHasher.Hash(request.Password);
         dbContext.Users.Add(user);
         await dbContext.SaveChangesAsync(cancellationToken);
 
