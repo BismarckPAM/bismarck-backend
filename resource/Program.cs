@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Resource.Service.Data;
 using Resource.Service.Mappings;
+using Resource.Service.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +18,7 @@ builder.Services.AddDbContext<ResourceDbContext>(options =>
     
 builder.Services.AddAutoMapper(config => config.AddProfile<MappingProfile>());
 builder.Services.AddValidatorsFromAssemblyContaining<MappingProfile>();
+builder.Services.AddScoped<IResourceService, ResourceService>();
 
 var app = builder.Build();
 
