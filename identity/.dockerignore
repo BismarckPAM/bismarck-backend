@@ -1,0 +1,11 @@
+bin/
+obj/
+TestResults/
+**/bin/
+**/obj/
+**/TestResults/
+**/coverage/
+Identity.Service.Tests/
+Identity.Service.IntegrationTests/
+.git/
+.vs/
