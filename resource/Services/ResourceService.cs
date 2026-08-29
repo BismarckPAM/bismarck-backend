@@ -42,4 +42,41 @@ public class ResourceService(ResourceDbContext dbContext, IMapper mapper) : IRes
 
         return mapper.Map<ResourceResponse>(resource);
     }
+
+    public async Task<ResourceResponse> UpdateAsync(Guid id, UpdateResourceRequest request)
+    {
+        var resource = await dbContext.Resources
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(resource => resource.Id == id);
+
+        if (resource is null)
+        {
+            throw new NotFoundException($"Resource with id '{id}' was not found.");
+        }
+
+        mapper.Map(request, resource);
+        await dbContext.SaveChangesAsync();
+
+        return mapper.Map<ResourceResponse>(resource);
+    }
+
+    public async Task<ResourceResponse> DeleteAsync(Guid id)
+    {
+        var resource = await dbContext.Resources
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(resource => resource.Id == id);
+
+        if (resource is null)
+        {
+            throw new NotFoundException($"Resource with id '{id}' was not found.");
+        }
+
+        if (resource.IsActive)
+        {
+            resource.IsActive = false;
+            await dbContext.SaveChangesAsync();
+        }
+
+        return mapper.Map<ResourceResponse>(resource);
+    }
 }
