@@ -10,6 +10,7 @@ public class MappingProfile : Profile
 	public MappingProfile()
 	{
 		CreateMap<CreateResourceRequest, ResourceModel>();
+		CreateMap<UpdateResourceRequest, ResourceModel>();
 		CreateMap<ResourceModel, ResourceResponse>();
 	}
 }
