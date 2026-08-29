@@ -1,4 +1,6 @@
 using AutoMapper;
+using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.EntityFrameworkCore;
 using Resource.Service.Data;
 using Resource.Service.DTOs;
@@ -8,10 +10,21 @@ using ResourceModel = Resource.Service.Models.Resource;
 
 namespace Resource.Service.Services;
 
-public class ResourceService(ResourceDbContext dbContext, IMapper mapper) : IResourceService
+public class ResourceService(
+    ResourceDbContext dbContext,
+    IMapper mapper,
+    IValidator<CreateResourceRequest> createValidator,
+    IValidator<UpdateResourceRequest> updateValidator) : IResourceService
 {
     public async Task<ResourceResponse> CreateAsync(CreateResourceRequest request)
     {
+        if (request is null)
+        {
+            throw new ValidationException(new[] { new ValidationFailure("request", "Request body cannot be null.") });
+        }
+
+        await createValidator.ValidateAndThrowAsync(request);
+
         var resource = mapper.Map<ResourceModel>(request);
 
         dbContext.Resources.Add(resource);
@@ -45,6 +58,13 @@ public class ResourceService(ResourceDbContext dbContext, IMapper mapper) : IRes
 
     public async Task<ResourceResponse> UpdateAsync(Guid id, UpdateResourceRequest request)
     {
+        if (request is null)
+        {
+            throw new ValidationException(new[] { new ValidationFailure("request", "Request body cannot be null.") });
+        }
+
+        await updateValidator.ValidateAndThrowAsync(request);
+
         var resource = await dbContext.Resources
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(resource => resource.Id == id);
