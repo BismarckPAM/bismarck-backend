@@ -28,45 +28,24 @@ public class ResourcesController(IResourceService resourceService) : ControllerB
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ResourceResponse>> GetById(Guid id)
     {
-        try
-        {
-            var resource = await resourceService.GetByIdAsync(id);
+        var resource = await resourceService.GetByIdAsync(id);
 
-            return Ok(resource);
-        }
-        catch (NotFoundException)
-        {
-            return NotFound();
-        }
+        return Ok(resource);
     }
 
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ResourceResponse>> Update(Guid id, UpdateResourceRequest request)
     {
-        try
-        {
-            var resource = await resourceService.UpdateAsync(id, request);
+        var resource = await resourceService.UpdateAsync(id, request);
 
-            return Ok(resource);
-        }
-        catch (NotFoundException)
-        {
-            return NotFound();
-        }
+        return Ok(resource);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<ActionResult<ResourceResponse>> Delete(Guid id)
     {
-        try
-        {
-            var resource = await resourceService.DeleteAsync(id);
+        var resource = await resourceService.DeleteAsync(id);
 
-            return Ok(resource);
-        }
-        catch (NotFoundException)
-        {
-            return NotFound();
-        }
+        return Ok(resource);
     }
 }
