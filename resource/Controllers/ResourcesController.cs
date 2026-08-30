@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Resource.Service.DTOs;
 using Resource.Service.Exceptions;
@@ -5,6 +6,7 @@ using Resource.Service.Services;
 
 namespace Resource.Service.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/resources")]
 public class ResourcesController(IResourceService resourceService) : ControllerBase

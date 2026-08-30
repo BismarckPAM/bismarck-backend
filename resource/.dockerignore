@@ -1,0 +1,12 @@
+.git/
+.gitignore
+.dockerignore
+*.zip
+bin/
+obj/
+**/bin/
+**/obj/
+TestResults/
+**/coverage/
+Resource.Service.Tests/
+Resource.Service.IntegrationTests/

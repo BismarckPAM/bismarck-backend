@@ -1,0 +1,73 @@
+================================================================================
+Bismarck PAM - Resource Service Test Suite Summary
+================================================================================
+
+Date: 2026-08-29
+Framework: .NET 10.0 (xUnit + EF Core InMemory + Testcontainers PostgreSql 4.14.0)
+Solution: Resource.Service.sln
+
+Total Tests: 47
+Passed: 47
+Failed: 0
+Skipped: 0
+Result: PASSED (100%)
+
+--------------------------------------------------------------------------------
+Test Breakdown by Project
+--------------------------------------------------------------------------------
+
+1. Resource.Service.Tests (Unit Tests - 37 tests)
+   - ResourceService Tests (11 tests):
+     * CreateAsync: Success path creating active resource in database
+     * CreateAsync: Throws ValidationException when validator rejects request
+     * GetAllAsync: Returns only active resources respecting EF Core global HasQueryFilter
+     * GetByIdAsync: Returns active resource by ID
+     * GetByIdAsync: Throws NotFoundException for nonexistent resource ID
+     * GetByIdAsync: Throws NotFoundException for inactive (decommissioned) resource due to query filter
+     * UpdateAsync: Updates fields and returns updated resource
+     * UpdateAsync: Throws NotFoundException for nonexistent ID
+     * UpdateAsync: Successfully reactivates decommissioned resource using IgnoreQueryFilters
+     * DeleteAsync: Successfully decommissions active resource (soft-delete)
+     * DeleteAsync: Idempotent repeat-delete returns already-decommissioned resource without throwing
+     * DeleteAsync: Throws NotFoundException for nonexistent ID
+   - CreateResourceRequestValidator Tests (13 tests):
+     * Valid input passes validation
+     * Empty/whitespace/null 'Type' fails validation
+     * Empty/whitespace/null 'Owner' fails validation
+     * Empty/whitespace/null 'Environment' fails validation
+     * Null 'Criticality' fails validation with "must be one of: LOW, MEDIUM, HIGH, CRITICAL"
+     * Invalid enum value for 'Criticality' fails with friendly message
+   - UpdateResourceRequestValidator Tests (13 tests):
+     * Valid input passes validation
+     * Empty/whitespace/null 'Type' fails validation
+     * Empty/whitespace/null 'Owner' fails validation
+     * Empty/whitespace/null 'Environment' fails validation
+     * Null 'Criticality' fails validation with "must be one of: LOW, MEDIUM, HIGH, CRITICAL"
+     * Invalid enum value for 'Criticality' fails with friendly message
+     * Null 'IsActive' fails validation
+
+2. Resource.Service.IntegrationTests (Integration Tests - 10 tests)
+   - Authorization & Security Boundaries (3 tests):
+     * GET /api/resources without Authorization header -> 401 Unauthorized
+     * GET /api/resources with malformed/garbage bearer token -> 401 Unauthorized
+     * GET /api/resources with valid JWT bearer token -> 200 OK
+   - Full HTTP Lifecycle & Soft-Delete Verification (1 test):
+     * POST /api/resources (201 Created) -> Returns assigned ID and properties
+     * GET /api/resources (200 OK) -> Resource listed in active items
+     * GET /api/resources/{id} (200 OK) -> Matches created resource
+     * PUT /api/resources/{id} (200 OK) -> Updates fields
+     * DELETE /api/resources/{id} (200 OK) -> Decommissions resource
+     * GET /api/resources (200 OK) -> Excluded from active resources list
+     * GET /api/resources/{id} (404 Not Found) -> Returns 404 for decommissioned resource
+     * Database direct query (IgnoreQueryFilters) -> Confirms entity still in Postgres with IsActive=false
+   - Error & Status Code Verification (6 tests):
+     * GET /api/resources/{unknownId} -> 404 Not Found
+     * PUT /api/resources/{unknownId} -> 404 Not Found
+     * DELETE /api/resources/{unknownId} -> 404 Not Found
+     * POST /api/resources (Invalid Criticality "URGENT") -> 400 Bad Request with structured error body { errors: [...] }
+     * POST /api/resources (Missing required fields) -> 400 Bad Request with structured error body
+     * PUT /api/resources/{id} (Null IsActive) -> 400 Bad Request with structured error body
+
+================================================================================
+Definition of Done Evidence: VERIFIED & COMPLETE
+================================================================================
