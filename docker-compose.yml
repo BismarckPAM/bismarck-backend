@@ -1,18 +1,5 @@
 services:
-  # --- Identity Services ---
-  identity-db:
-    image: postgres:latest
-    container_name: identity-db
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${IDENTITY_DB_NAME}
-    ports:
-      - "${IDENTITY_DB_PORT}:5432"
-    volumes:
-      - identity_data:/var/lib/postgresql/data
-
-  identity-service:
+  identity-svc:
     build:
       context: ./identity
       dockerfile: Dockerfile
@@ -22,25 +9,10 @@ services:
     # network as http://identity-service:8080.
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      # String interpolation for the connection string
-      - ConnectionStrings__DefaultConnection=Host=identity-db;Database=${IDENTITY_DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
-    depends_on:
-      - identity-db
+      - ConnectionStrings__IdentityDb=${ConnectionStrings__IdentityDb}
+    restart: unless-stopped
 
-  # --- Resource Services ---
-  resource-db:
-    image: postgres:latest
-    container_name: resource-db
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${RESOURCE_DB_NAME}
-    ports:
-      - "${RESOURCE_DB_PORT}:5432"
-    volumes:
-      - resource_data:/var/lib/postgresql/data
-
-  resource-service:
+  resource-svc:
     build:
       context: ./resource
       dockerfile: Dockerfile

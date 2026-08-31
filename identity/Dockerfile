@@ -1,7 +1,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
 WORKDIR /src
-COPY Identity.Service.csproj .
-RUN dotnet restore "Identity.Service.csproj"
+
+
+COPY Identity.Service.csproj ./
+RUN dotnet restore "Identity.Service.csproj" -v n
 
 FROM restore AS build
 COPY . .
