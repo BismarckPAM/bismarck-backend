@@ -16,6 +16,7 @@ public class IdentityDbContext(DbContextOptions<IdentityDbContext> options) : Db
             entity.HasKey(user => user.Id);
             entity.Property(user => user.FullName).HasMaxLength(200).IsRequired();
             entity.Property(user => user.Email).HasMaxLength(320).IsRequired();
+            entity.Property(user => user.PasswordHash).HasMaxLength(500).IsRequired();
             entity.HasIndex(user => user.Email).IsUnique();
             entity.HasQueryFilter(user => user.IsActive);
 
