@@ -1,52 +1,126 @@
 services:
-  identity-svc:
+
+  # ============================================================
+  # Identity Services
+  # ============================================================
+
+  identity-db:
+    image: postgres:latest
+    container_name: identity-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${IDENTITY_DB_NAME}
+
+    ports:
+      - "${IDENTITY_DB_PORT}:5432"
+
+    volumes:
+      - identity_data:/var/lib/postgresql/data
+
+
+  identity_svc:
     build:
       context: ./identity
       dockerfile: Dockerfile
-    container_name: identity-service
-    # No host port mapping: the API Gateway is the only entry point from outside
-    # the compose network (architecture rule #4). Reachable on the internal
-    # network as http://identity-service:8080.
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__IdentityDb=${ConnectionStrings__IdentityDb}
-    restart: unless-stopped
 
-  resource-svc:
+    container_name: identity_svc
+
+    # No host port mapping.
+    # The API Gateway is the only external entry point.
+    # Reachable internally as:
+    # http://identity_svc:8080
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: >-
+        Host=identity-db;
+        Database=${IDENTITY_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+
+    depends_on:
+      - identity-db
+
+
+  # ============================================================
+  # Resource Services
+  # ============================================================
+
+  resource-db:
+    image: postgres:latest
+    container_name: resource-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${RESOURCE_DB_NAME}
+
+    ports:
+      - "${RESOURCE_DB_PORT}:5432"
+
+    volumes:
+      - resource_data:/var/lib/postgresql/data
+
+
+  resource_svc:
     build:
       context: ./resource
       dockerfile: Dockerfile
-    container_name: resource-service
-    # No host port mapping — see identity-service note above.
+
+    container_name: resource_svc
+
+    # No host port mapping.
+    # Reachable internally as:
+    # http://resource_svc:8080
+
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=resource-db;Database=${RESOURCE_DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: >-
+        Host=resource-db;
+        Database=${RESOURCE_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+
     depends_on:
       - resource-db
 
-  # --- API Gateway ---
-  # Single external entry point for browser/CLI/third-party clients. All
-  # external traffic goes through here; services are only reachable on the
-  # internal Docker network.
-  gateway:
+
+  # ============================================================
+  # API Gateway
+  # ============================================================
+
+  gateway_svc:
     build:
       context: ./gateway
       dockerfile: Dockerfile
-    container_name: gateway
+
+    container_name: gateway_svc
+
+    # Single external entry point for browser/CLI/third-party
+    # clients.
     ports:
       - "${GATEWAY_PORT}:8080"
+
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      # Downstream URLs come from the Services config section (env-var friendly:
-      # Services__Identity__Url, Services__Resource__Url). These use the Docker
-      # Compose service names on the internal network.
-      - Services__Identity__Url=http://identity-service:8080
-      - Services__Resource__Url=http://resource-service:8080
-      # Frontend origin(s) the gateway's CORS policy will accept.
-      - AllowedOrigins__0=${ALLOWED_ORIGINS}
+      ASPNETCORE_ENVIRONMENT: Development
+
+      # Internal Docker Compose service URLs.
+      Services__Identity__Url: http://identity_svc:8080
+      Services__Resource__Url: http://resource_svc:8080
+
+      # Frontend origin(s) accepted by the gateway CORS policy.
+      AllowedOrigins__0: ${ALLOWED_ORIGINS}
+
     depends_on:
-      - identity-service
-      - resource-service
+      - identity_svc
+      - resource_svc
+
+
+# ============================================================
+# Persistent Volumes
+# ============================================================
 
 volumes:
   identity_data:
