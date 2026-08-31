@@ -1,11 +1,13 @@
 using FluentValidation;
 using Identity.Service.DTOs;
 using Identity.Service.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Identity.Service.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/identity/users")]
 public class UsersController(IUserService userService, IValidator<CreateUserRequest> createValidator, IValidator<UpdateUserRequest> updateValidator) : ControllerBase
 {
