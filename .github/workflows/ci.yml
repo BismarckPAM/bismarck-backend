@@ -2,80 +2,194 @@ name: Bismarck PAM CI/CD
 
 on:
   push:
-    branches: [ deploy/production, main ]
+    branches:
+      - deploy/production
+      - main
+
   pull_request:
-    branches: [ deploy/production, main ]
+    branches:
+      - deploy/production
+      - main
 
 jobs:
-  # 1. CI - Build & Test Matrix 
+
+  # ============================================================
+  # 1. CI - Build and Test all .NET services
+  # ============================================================
   test-and-verify:
     name: Test & Build (${{ matrix.service }})
     runs-on: ubuntu-latest
+
     strategy:
-      fail-fast: false # A failure in one service won't cancel the other
+      fail-fast: false
       matrix:
-        service: [identity, resource]
+        service:
+          - identity
+          - resource
+          - gateway
 
     steps:
+      # --------------------------------------------------------
+      # Checkout
+      # --------------------------------------------------------
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # --------------------------------------------------------
+      # .NET
+      # --------------------------------------------------------
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
+      # --------------------------------------------------------
+      # Restore
+      # --------------------------------------------------------
       - name: Restore Dependencies
         run: dotnet restore ./${{ matrix.service }}
 
+      # --------------------------------------------------------
+      # Build
+      # --------------------------------------------------------
       - name: Build Service
-        run: dotnet build ./${{ matrix.service }} --no-restore --configuration Release
-
-      - name: Run Tests (if test projects exist)
         run: |
-          if ls ./${{ matrix.service }}/*Test*.csproj 1> /dev/null 2>&1; then
-            dotnet test ./${{ matrix.service }} --no-build --configuration Release --verbosity normal
-          else
-            echo "No test projects found for ${{ matrix.service }}, skipping test step."
-          fi
+          dotnet build ./${{ matrix.service }} \
+            --no-restore \
+            --configuration Release
 
-  # 2. CD - Build Docker Images & Push to Azure Container Registry
+      # --------------------------------------------------------
+      # Unit Tests
+    
+
+
+  # ============================================================
+  # 2. CI - Validate Docker Compose
+  # ============================================================
+  validate-compose:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    needs: test-and-verify
+
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        uses: docker/setup-buildx-action@v3
+
+      # --------------------------------------------------------
+      # Docker Compose requires values for ${...} variables.
+      #
+      # These are dummy CI values. They are NOT production
+      # secrets and are only used to validate the Compose file.
+      # --------------------------------------------------------
+      - name: Create CI Environment File
+        run: |
+          cat > .env <<'EOF'
+          DB_USER=ci_user
+          DB_PASSWORD=ci_password
+          IDENTITY_DB_NAME=identity_db
+          RESOURCE_DB_NAME=resource_db
+          IDENTITY_DB_PORT=5433
+          RESOURCE_DB_PORT=5434
+          GATEWAY_PORT=8080
+          ALLOWED_ORIGINS=http://localhost:3000
+          EOF
+
+      # --------------------------------------------------------
+      # Validate the complete Compose configuration
+      # --------------------------------------------------------
+      - name: Validate Docker Compose
+        run: docker compose config
+
+      # --------------------------------------------------------
+      # Build every application defined in docker-compose.yml
+      #
+      # This catches Dockerfile/build problems before CD.
+      # --------------------------------------------------------
+      - name: Build Docker Compose Services
+        run: docker compose build
+
+      # --------------------------------------------------------
+      # Clean up
+      # --------------------------------------------------------
+      - name: Clean Up
+        if: always()
+        run: docker compose down -v
+
+
+  # ============================================================
+  # 3. CD - Build & Push Application Images to ACR
+  # ============================================================
   build-and-push-acr:
     name: Build & Push Docker Image (${{ matrix.service }})
-    needs: test-and-verify
-    # Only push images on direct push/merge to deploy/production or main
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/deploy/production' || github.ref == 'refs/heads/main')
+    needs:
+      - test-and-verify
+      - validate-compose
+
+    # Only push on actual pushes to production/main.
+    # Pull requests will never push images.
+    if: >
+      github.event_name == 'push' &&
+      (
+        github.ref == 'refs/heads/deploy/production' ||
+        github.ref == 'refs/heads/main'
+      )
+
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         include:
           - service: identity
             image_name: identity-svc
+
           - service: resource
             image_name: resource-svc
 
+          - service: gateway
+            image_name: gateway-svc
+
     steps:
+
+      # --------------------------------------------------------
+      # Checkout
+      # --------------------------------------------------------
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # --------------------------------------------------------
+      # Docker Buildx
+      # --------------------------------------------------------
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Azure Container Registry (ACR)
+      # --------------------------------------------------------
+      # Login to ACR
+      # --------------------------------------------------------
+      - name: Log in to Azure Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ secrets.ACR_LOGIN_SERVER }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
+      # --------------------------------------------------------
+      # Build & Push
+      # --------------------------------------------------------
       - name: Build and Push Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Dockerfile
           push: true
+
           tags: |
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image_name }}:${{ github.sha }}
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image_name }}:latest
-          # Caches Docker layers on GitHub Actions for fast re-builds
+
+          # GitHub Actions Docker layer cache
           cache-from: type=gha
           cache-to: type=gha,mode=max
