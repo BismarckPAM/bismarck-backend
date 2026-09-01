@@ -11,17 +11,20 @@ on:
       - deploy/production
       - main
 
+
 jobs:
 
   # ============================================================
-  # 1. CI - Build and Test all .NET services
+  # 1. CI - Build & Test
   # ============================================================
+
   test-and-verify:
     name: Test & Build (${{ matrix.service }})
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
+
       matrix:
         service:
           - identity
@@ -29,108 +32,207 @@ jobs:
           - gateway
 
     steps:
+
       # --------------------------------------------------------
       # Checkout
       # --------------------------------------------------------
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
+
       # --------------------------------------------------------
-      # .NET
+      # Setup .NET
       # --------------------------------------------------------
+
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
+
       # --------------------------------------------------------
-      # Restore
+      # Restore Dependencies
       # --------------------------------------------------------
+
       - name: Restore Dependencies
         run: dotnet restore ./${{ matrix.service }}
 
+
       # --------------------------------------------------------
-      # Build
+      # Build Service
       # --------------------------------------------------------
+
       - name: Build Service
         run: |
           dotnet build ./${{ matrix.service }} \
             --no-restore \
             --configuration Release
 
-      # --------------------------------------------------------
-      # Unit Tests
-    
+
+      # ========================================================
+      # Identity Tests
+      # ========================================================
+
+      - name: Run Identity Unit Tests
+        if: matrix.service == 'identity'
+        run: |
+          dotnet test \
+            ./identity/Identity.Service.Tests/Identity.Service.Tests.csproj \
+            --configuration Release \
+            --no-restore \
+            --verbosity normal
+
+
+      - name: Run Identity Integration Tests
+        if: matrix.service == 'identity'
+        run: |
+          dotnet test \
+            ./identity/Identity.Service.IntegrationTests/Identity.Service.IntegrationTests.csproj \
+            --configuration Release \
+            --no-restore \
+            --verbosity normal
+
+
+      # ========================================================
+      # Resource Tests
+      # ========================================================
+
+      - name: Run Resource Unit Tests
+        if: matrix.service == 'resource'
+        run: |
+          dotnet test \
+            ./resource/Resource.Service.Tests/Resource.Service.Tests.csproj \
+            --configuration Release \
+            --no-restore \
+            --verbosity normal
+
+
+      - name: Run Resource Integration Tests
+        if: matrix.service == 'resource'
+        run: |
+          dotnet test \
+            ./resource/Resource.Service.IntegrationTests/Resource.Service.IntegrationTests.csproj \
+            --configuration Release \
+            --no-restore \
+            --verbosity normal
+
+
+      # ========================================================
+      # Gateway
+      #
+      # Gateway currently has no test project based on the
+      # structure you provided.
+      # ========================================================
+
+      - name: Gateway Test Status
+        if: matrix.service == 'gateway'
+        run: |
+          echo "Gateway build completed successfully."
+          echo "No Gateway test project is currently configured."
 
 
   # ============================================================
   # 2. CI - Validate Docker Compose
   # ============================================================
+
   validate-compose:
     name: Validate Docker Compose
     runs-on: ubuntu-latest
-    needs: test-and-verify
+
+    needs:
+      - test-and-verify
 
     steps:
+
+      # --------------------------------------------------------
+      # Checkout
+      # --------------------------------------------------------
 
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Compose
-        uses: docker/setup-buildx-action@v3
 
       # --------------------------------------------------------
-      # Docker Compose requires values for ${...} variables.
-      #
-      # These are dummy CI values. They are NOT production
-      # secrets and are only used to validate the Compose file.
+      # Setup Docker Buildx
       # --------------------------------------------------------
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+
+      # --------------------------------------------------------
+      # Create CI Environment
+      #
+      # These values exist ONLY for Compose validation/build.
+      # They are not production credentials.
+      # --------------------------------------------------------
+
       - name: Create CI Environment File
         run: |
           cat > .env <<'EOF'
           DB_USER=ci_user
           DB_PASSWORD=ci_password
+
           IDENTITY_DB_NAME=identity_db
           RESOURCE_DB_NAME=resource_db
+
           IDENTITY_DB_PORT=5433
           RESOURCE_DB_PORT=5434
+
           GATEWAY_PORT=8080
+
           ALLOWED_ORIGINS=http://localhost:3000
           EOF
 
+
       # --------------------------------------------------------
-      # Validate the complete Compose configuration
+      # Validate Docker Compose
       # --------------------------------------------------------
+
       - name: Validate Docker Compose
-        run: docker compose config
+        run: |
+          docker compose config
+
 
       # --------------------------------------------------------
-      # Build every application defined in docker-compose.yml
+      # Build Docker Compose Services
       #
-      # This catches Dockerfile/build problems before CD.
+      # identity_svc
+      # resource_svc
+      # gateway_svc
+      #
+      # PostgreSQL images are pulled from Docker Hub.
       # --------------------------------------------------------
+
       - name: Build Docker Compose Services
-        run: docker compose build
+        run: |
+          docker compose build
+
 
       # --------------------------------------------------------
-      # Clean up
+      # Cleanup
       # --------------------------------------------------------
+
       - name: Clean Up
         if: always()
-        run: docker compose down -v
+        run: |
+          docker compose down -v
 
 
   # ============================================================
-  # 3. CD - Build & Push Application Images to ACR
+  # 3. CD - Build & Push Images to Azure Container Registry
   # ============================================================
+
   build-and-push-acr:
     name: Build & Push Docker Image (${{ matrix.service }})
+
     needs:
       - test-and-verify
       - validate-compose
 
-    # Only push on actual pushes to production/main.
-    # Pull requests will never push images.
+    # Only push on actual pushes to main or deploy/production.
+    # Pull requests never push images to ACR.
     if: >
       github.event_name == 'push' &&
       (
@@ -141,34 +243,43 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
+
       matrix:
         include:
+
           - service: identity
-            image_name: identity-svc
+            image_name: identity_svc
 
           - service: resource
-            image_name: resource-svc
+            image_name: resource_svc
 
           - service: gateway
-            image_name: gateway-svc
+            image_name: gateway_svc
+
 
     steps:
 
       # --------------------------------------------------------
       # Checkout
       # --------------------------------------------------------
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
+
       # --------------------------------------------------------
-      # Docker Buildx
+      # Setup Docker Buildx
       # --------------------------------------------------------
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+
       # --------------------------------------------------------
-      # Login to ACR
+      # Login to Azure Container Registry
       # --------------------------------------------------------
+
       - name: Log in to Azure Container Registry
         uses: docker/login-action@v3
         with:
@@ -176,20 +287,22 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
+
       # --------------------------------------------------------
-      # Build & Push
+      # Build & Push Docker Image
       # --------------------------------------------------------
+
       - name: Build and Push Image
         uses: docker/build-push-action@v6
         with:
           context: ./${{ matrix.service }}
           file: ./${{ matrix.service }}/Dockerfile
+
           push: true
 
           tags: |
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image_name }}:${{ github.sha }}
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image_name }}:latest
 
-          # GitHub Actions Docker layer cache
           cache-from: type=gha
           cache-to: type=gha,mode=max
