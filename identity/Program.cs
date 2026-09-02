@@ -1,8 +1,10 @@
 using FluentValidation;
 using Identity.Service.Data;
+using Identity.Service.DTOs;
 using Identity.Service.Mappings;
 using Identity.Service.Middleware;
 using Identity.Service.Services;
+using Identity.Service.Validators;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -37,6 +39,7 @@ builder.Services.AddDbContext<IdentityDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddAutoMapper(config => config.AddProfile<MappingProfile>());
 builder.Services.AddValidatorsFromAssemblyContaining<MappingProfile>();
+builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
