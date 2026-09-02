@@ -46,6 +46,17 @@ public class IdentityApiTests(IdentityApiFixture fixture) : IClassFixture<Identi
     }
 
     [Fact]
+    public async Task LoginWithMalformedEmailReturnsBadRequest()
+    {
+        var response = await client.PostAsJsonAsync("/api/identity/auth/login", new LoginRequest
+        {
+            Email = "notanemail", Password = "Password123!"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task LoginRejectsInactiveUserGenerically()
     {
         using (var scope = fixture.Services.CreateScope())
@@ -72,15 +83,14 @@ public class IdentityApiTests(IdentityApiFixture fixture) : IClassFixture<Identi
     [Theory]
     [InlineData("", "AdminPassword123!")]
     [InlineData("admin@example.com", "")]
-    public async Task LoginMissingFieldsCurrentlyReturnsUnauthorizedBecauseNoValidatorExists(string email, string password)
+    public async Task LoginMissingFieldsReturnsBadRequest(string email, string password)
     {
         var response = await client.PostAsJsonAsync("/api/identity/auth/login", new LoginRequest
         {
             Email = email, Password = password
         });
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal("Invalid email or password", (await response.Content.ReadFromJsonAsync<ErrorResponse>())!.Message);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
