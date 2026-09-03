@@ -50,6 +50,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+var allowedOrigin = builder.Configuration["FRONTEND_ORIGIN"] ?? "http://localhost:5173";
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(allowedOrigin)
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -97,6 +109,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Enviro
 
 app.UseHttpsRedirection();
 
+app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
