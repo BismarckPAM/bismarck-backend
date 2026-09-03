@@ -57,6 +57,26 @@ public class IdentityApiTests(IdentityApiFixture fixture) : IClassFixture<Identi
     }
 
     [Fact]
+    public async Task LoginPreflightAllowsConfiguredOriginAndRejectsOtherOrigins()
+    {
+        using var allowedRequest = new HttpRequestMessage(HttpMethod.Options, "/api/identity/auth/login");
+        allowedRequest.Headers.Add("Origin", "http://localhost:5173");
+        allowedRequest.Headers.Add("Access-Control-Request-Method", "POST");
+
+        var allowedResponse = await client.SendAsync(allowedRequest);
+
+        Assert.Equal("http://localhost:5173", allowedResponse.Headers.GetValues("Access-Control-Allow-Origin").Single());
+
+        using var disallowedRequest = new HttpRequestMessage(HttpMethod.Options, "/api/identity/auth/login");
+        disallowedRequest.Headers.Add("Origin", "http://malicious.example");
+        disallowedRequest.Headers.Add("Access-Control-Request-Method", "POST");
+
+        var disallowedResponse = await client.SendAsync(disallowedRequest);
+
+        Assert.False(disallowedResponse.Headers.Contains("Access-Control-Allow-Origin"));
+    }
+
+    [Fact]
     public async Task LoginRejectsInactiveUserGenerically()
     {
         using (var scope = fixture.Services.CreateScope())

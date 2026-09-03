@@ -13,8 +13,19 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var allowedOrigin = builder.Configuration["FRONTEND_ORIGIN"] ?? "http://localhost:5173";
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(allowedOrigin)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -76,6 +87,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Enviro
 
 app.UseHttpsRedirection();
 app.UseMiddleware<ExceptionHandlerMiddleware>();
+app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
