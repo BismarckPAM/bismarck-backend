@@ -12,7 +12,7 @@ public class MappingProfile : Profile
         CreateMap<UpdateUserRequest, User>()
             .ForMember(user => user.IsActive, options => options.MapFrom(request => request.IsActive!.Value));
         CreateMap<User, UserResponse>()
-            .ForMember(response => response.RoleName, options => options.MapFrom(user => user.Role.Name))
-            .ForMember(response => response.DepartmentName, options => options.MapFrom(user => user.Department.Name));
+            .ForMember(response => response.Role, options => options.MapFrom(user => user.Role.Name))
+            .ForMember(response => response.Department, options => options.MapFrom(user => user.Department.Name));
     }
 }
