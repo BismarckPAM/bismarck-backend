@@ -16,7 +16,7 @@ public class ResourceApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public const string TestSigningKey = "SuperSecretTestKeyThatIsAtLeast32BytesLongForHmacSha256!";
     public const string TestIssuer = "BismarckIdentityService";
-    public const string TestAudience = "BismarckPAM";
+    public const string TestAudience = "Bismarck.Services";
 
     static ResourceApiFactory()
     {
