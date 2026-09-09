@@ -1,6 +1,17 @@
 @Identity.Service_HostAddress = http://localhost:5080
+@jwt = paste-login-token-here
 
-GET {{Identity.Service_HostAddress}}/weatherforecast/
+POST {{Identity.Service_HostAddress}}/api/identity/auth/login
+Content-Type: application/json
+
+{
+	"email": "admin@example.com",
+	"password": "AdminPassword123!"
+}
+
+### Use Swagger's Authorize button to paste the returned bearer token.
+GET {{Identity.Service_HostAddress}}/api/identity/users
 Accept: application/json
+Authorization: Bearer {{jwt}}
 
 ###
