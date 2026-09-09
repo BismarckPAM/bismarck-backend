@@ -41,6 +41,24 @@ builder.Services
     .AddPolicyHandler(retryPolicy)
     .AddPolicyHandler(timeoutPolicy);
 
+var resourceServiceBaseUrl = Environment.GetEnvironmentVariable("RESOURCE_SERVICE_URL")
+    ?? builder.Configuration["ResourceService:BaseUrl"]
+    ?? throw new InvalidOperationException(
+        "ResourceService:BaseUrl or RESOURCE_SERVICE_URL is required.");
+
+if (!Uri.TryCreate(resourceServiceBaseUrl, UriKind.Absolute, out var resourceServiceUri))
+    throw new InvalidOperationException(
+        "ResourceService:BaseUrl must be an absolute URL.");
+
+builder.Services
+    .AddHttpClient<IResourceServiceClient, ResourceServiceClient>(client =>
+    {
+        client.BaseAddress = resourceServiceUri;
+        client.Timeout = TimeSpan.FromSeconds(5);
+    })
+    .AddPolicyHandler(retryPolicy)
+    .AddPolicyHandler(timeoutPolicy);
+
 var connectionString = builder.Configuration.GetConnectionString("AuthorizationDatabase")
     ?? throw new InvalidOperationException(
         "ConnectionStrings:AuthorizationDatabase is required.");
