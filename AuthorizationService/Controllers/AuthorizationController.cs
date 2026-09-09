@@ -21,24 +21,30 @@ public sealed class AuthorizationController(
         var user = await identityServiceClient.GetUserRoleAsync(
             request.UserId,
             cancellationToken: cancellationToken);
-        if (user is null)
-            return Ok(AuthorizationDecisionResult.Deny("USER_UNVERIFIED"));
+        if (user.Value is null)
+        {
+            var reason = user.FailureReason ?? AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED;
+            return Ok(AuthorizationDecisionResult.Deny(reason));
+        }
 
-        if (!user.IsActive)
-            return Ok(AuthorizationDecisionResult.Deny("USER_DEACTIVATED"));
+        if (!user.Value.IsActive)
+            return Ok(AuthorizationDecisionResult.Deny(AuthorizationDenialReason.USER_DEACTIVATED));
 
-        if (string.IsNullOrWhiteSpace(user.RoleName))
-            return Ok(AuthorizationDecisionResult.Deny("USER_ROLE_NOT_ASSIGNED"));
+        if (string.IsNullOrWhiteSpace(user.Value.RoleName))
+            return Ok(AuthorizationDecisionResult.Deny(AuthorizationDenialReason.USER_ROLE_NOT_ASSIGNED));
 
         var resource = await resourceServiceClient.GetResourceContextAsync(
             request.ResourceId,
             cancellationToken: cancellationToken);
-        if (resource is null)
-            return Ok(AuthorizationDecisionResult.Deny("RESOURCE_NOT_FOUND"));
+        if (resource.Value is null)
+        {
+            var reason = resource.FailureReason ?? AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED;
+            return Ok(AuthorizationDecisionResult.Deny(reason));
+        }
 
         var result = await policyDecisionEngine.EvaluateAsync(
-            new UserDto(user.Id, user.RoleName, user.IsActive),
-            new ResourceDto(resource.Type, resource.Environment, resource.Criticality),
+            new UserDto(user.Value.Id, user.Value.RoleName, user.Value.IsActive),
+            new ResourceDto(resource.Value.Type, resource.Value.Environment, resource.Value.Criticality),
             request.Action,
             cancellationToken);
 

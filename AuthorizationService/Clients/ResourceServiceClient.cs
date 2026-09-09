@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AuthorizationService.Models;
 
 namespace AuthorizationService.Clients;
 
@@ -11,7 +12,7 @@ public sealed class ResourceServiceClient(
     ILogger<ResourceServiceClient> logger,
     IHttpContextAccessor httpContextAccessor) : IResourceServiceClient
 {
-    public async Task<ResourceContext?> GetResourceContextAsync(
+    public async Task<ServiceLookupResult<ResourceContext>> GetResourceContextAsync(
         Guid resourceId,
         string? accessToken = null,
         CancellationToken cancellationToken = default)
@@ -37,7 +38,7 @@ public sealed class ResourceServiceClient(
                 logger.LogWarning(
                     "Resource Service did not find resource {ResourceId}; authorization must deny.",
                     resourceId);
-                return null;
+                return new(null, AuthorizationDenialReason.RESOURCE_NOT_FOUND);
             }
 
             if (!response.IsSuccessStatusCode)
@@ -46,24 +47,24 @@ public sealed class ResourceServiceClient(
                     "Resource Service returned {StatusCode} for resource {ResourceId}; authorization must deny.",
                     response.StatusCode,
                     resourceId);
-                return null;
+                return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
             }
 
             var resource = await response.Content.ReadFromJsonAsync<ResourceResponse>(
                 cancellationToken);
 
             if (resource is null || !resource.IsActive)
-                return null;
+                return new(null, AuthorizationDenialReason.RESOURCE_NOT_FOUND);
 
             if (string.IsNullOrWhiteSpace(resource.Type)
                 || string.IsNullOrWhiteSpace(resource.Environment)
                 || string.IsNullOrWhiteSpace(resource.Criticality))
-                return null;
+                return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
 
-            return new ResourceContext(
+            return new(new ResourceContext(
                 resource.Type,
                 resource.Environment,
-                resource.Criticality);
+                resource.Criticality));
         }
         catch (HttpRequestException exception)
         {
@@ -71,7 +72,7 @@ public sealed class ResourceServiceClient(
                 exception,
                 "Resource Service is unreachable for resource {ResourceId}; authorization must deny.",
                 resourceId);
-            return null;
+            return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
         }
         catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -79,7 +80,7 @@ public sealed class ResourceServiceClient(
                 exception,
                 "Resource Service timed out for resource {ResourceId}; authorization must deny.",
                 resourceId);
-            return null;
+            return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
         }
         catch (JsonException exception)
         {
@@ -87,7 +88,7 @@ public sealed class ResourceServiceClient(
                 exception,
                 "Resource Service returned an invalid response for resource {ResourceId}; authorization must deny.",
                 resourceId);
-            return null;
+            return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
         }
     }
 

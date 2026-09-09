@@ -1,5 +1,6 @@
 using AuthorizationService.Data;
 using AuthorizationService.Models;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AuthorizationService.Services;
@@ -32,27 +33,35 @@ public sealed class PolicyDecisionEngine(AuthorizationDbContext dbContext)
         CancellationToken cancellationToken = default)
     {
         if (!user.IsActive)
-            return AuthorizationDecisionResult.Deny("USER_DEACTIVATED");
+            return AuthorizationDecisionResult.Deny(AuthorizationDenialReason.USER_DEACTIVATED);
 
         if (string.IsNullOrWhiteSpace(user.Role))
-            return AuthorizationDecisionResult.Deny("USER_ROLE_NOT_ASSIGNED");
+            return AuthorizationDecisionResult.Deny(AuthorizationDenialReason.USER_ROLE_NOT_ASSIGNED);
 
         if (string.IsNullOrWhiteSpace(action)
             || !ActionLevelMap.TryGetValue(action, out var requiredLevel))
-            return AuthorizationDecisionResult.Deny("UNKNOWN_ACTION");
+            return AuthorizationDecisionResult.Deny(AuthorizationDenialReason.UNKNOWN_ACTION);
 
-        var policy = await dbContext.AccessPolicies
-            .AsNoTracking()
-            .FirstOrDefaultAsync(item =>
-                item.IsActive
-                && item.Role.ToUpper() == user.Role.ToUpper()
-                && item.Environment.ToUpper() == resource.Environment.ToUpper()
-                && item.Criticality.ToUpper() == resource.Criticality.ToUpper(),
-                cancellationToken);
+        AccessPolicy? policy;
+        try
+        {
+            policy = await dbContext.AccessPolicies
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item =>
+                    item.IsActive
+                    && item.Role.ToUpper() == user.Role.ToUpper()
+                    && item.Environment.ToUpper() == resource.Environment.ToUpper()
+                    && item.Criticality.ToUpper() == resource.Criticality.ToUpper(),
+                    cancellationToken);
+        }
+        catch (DbException)
+        {
+            return AuthorizationDecisionResult.Deny(AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
+        }
 
         var maxAllowedLevel = policy?.MaxAccessLevel ?? 0;
         if (requiredLevel > maxAllowedLevel)
-            return AuthorizationDecisionResult.Deny("INSUFFICIENT_ROLE_PERMISSIONS");
+            return AuthorizationDecisionResult.Deny(AuthorizationDenialReason.INSUFFICIENT_ROLE_PERMISSIONS);
 
         var isProduction = resource.Environment.Equals("PROD", StringComparison.OrdinalIgnoreCase)
             || resource.Environment.Equals("PRODUCTION", StringComparison.OrdinalIgnoreCase);
