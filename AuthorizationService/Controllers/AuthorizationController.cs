@@ -18,9 +18,16 @@ public sealed class AuthorizationController(
         AuthorizationCheckRequest request,
         CancellationToken cancellationToken)
     {
-        var user = await identityServiceClient.GetUserRoleAsync(
+        var userTask = identityServiceClient.GetUserRoleAsync(
             request.UserId,
             cancellationToken: cancellationToken);
+        var resourceTask = resourceServiceClient.GetResourceContextAsync(
+            request.ResourceId,
+            cancellationToken: cancellationToken);
+
+        await Task.WhenAll(userTask, resourceTask);
+
+        var user = await userTask;
         if (user.Value is null)
         {
             var reason = user.FailureReason ?? AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED;
@@ -33,9 +40,7 @@ public sealed class AuthorizationController(
         if (string.IsNullOrWhiteSpace(user.Value.RoleName))
             return Ok(AuthorizationDecisionResult.Deny(AuthorizationDenialReason.USER_ROLE_NOT_ASSIGNED));
 
-        var resource = await resourceServiceClient.GetResourceContextAsync(
-            request.ResourceId,
-            cancellationToken: cancellationToken);
+        var resource = await resourceTask;
         if (resource.Value is null)
         {
             var reason = resource.FailureReason ?? AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED;
