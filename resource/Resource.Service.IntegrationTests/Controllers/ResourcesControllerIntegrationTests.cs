@@ -61,6 +61,19 @@ public class ResourcesControllerIntegrationTests : IClassFixture<ResourceApiFact
     }
 
     [Fact]
+    public async Task Preflight_FromAllowedOrigin_ReturnsCorsHeader()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/api/resources");
+        request.Headers.Add("Origin", "http://localhost:5173");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var response = await _factory.CreateClient().SendAsync(request);
+
+        Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
+        Assert.Equal("http://localhost:5173", origins.Single());
+    }
+
+    [Fact]
     public async Task FullHttpLifecycle_AndSoftDelete_Verification()
     {
         // 1. POST: Create a resource
