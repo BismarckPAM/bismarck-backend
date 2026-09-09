@@ -1,0 +1,81 @@
+name: Bismarck PAM CI/CD
+
+on:
+  push:
+    branches: [ deploy/production, main ]
+  pull_request:
+    branches: [ deploy/production, main ]
+
+jobs:
+  # 1. CI - Build & Test Matrix 
+  test-and-verify:
+    name: Test & Build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # A failure in one service won't cancel the other
+      matrix:
+        service: [identity, resource]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Dependencies
+        run: dotnet restore ./${{ matrix.service }}
+
+      - name: Build Service
+        run: dotnet build ./${{ matrix.service }} --no-restore --configuration Release
+
+      - name: Run Tests (if test projects exist)
+        run: |
+          if ls ./${{ matrix.service }}/*Test*.csproj 1> /dev/null 2>&1; then
+            dotnet test ./${{ matrix.service }} --no-build --configuration Release --verbosity normal
+          else
+            echo "No test projects found for ${{ matrix.service }}, skipping test step."
+          fi
+
+  # 2. CD - Build Docker Images & Push to Azure Container Registry
+  build-and-push-acr:
+    name: Build & Push Docker Image (${{ matrix.service }})
+    needs: test-and-verify
+    # Only push images on direct push/merge to deploy/production or main
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/deploy/production' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: identity
+            image_name: identity-svc
+          - service: resource
+            image_name: resource-svc
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure Container Registry (ACR)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image_name }}:${{ github.sha }}
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image_name }}:latest
+          # Caches Docker layers on GitHub Actions for fast re-builds
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
