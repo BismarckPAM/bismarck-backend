@@ -1,10 +1,12 @@
 using AuthorizationService.Data;
 using AuthorizationService.Clients;
 using AuthorizationService.Middleware;
+using AuthorizationService.Services;
 using Microsoft.EntityFrameworkCore;
 using Polly;
 using Polly.Extensions.Http;
 using Serilog;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +15,9 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Services(services)
     .Enrich.FromLogContext());
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
@@ -65,6 +69,7 @@ var connectionString = builder.Configuration.GetConnectionString("AuthorizationD
 
 builder.Services.AddDbContext<AuthorizationDbContext>(options =>
     options.UseNpgsql(connectionString));
+builder.Services.AddScoped<IPolicyDecisionEngine, PolicyDecisionEngine>();
 builder.Services
     .AddHealthChecks()
     .AddDbContextCheck<AuthorizationDbContext>("authorization-database");
