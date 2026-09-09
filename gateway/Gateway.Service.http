@@ -1,0 +1,24 @@
+@Gateway.Service_HostAddress = http://localhost:5081
+
+### Gateway health probe
+GET {{Gateway.Service_HostAddress}}/health
+Accept: text/plain
+
+### Rejected: no Authorization header (expect 401)
+GET {{Gateway.Service_HostAddress}}/api/identity/users
+Accept: application/json
+
+### Rejected: malformed Authorization header (expect 401)
+GET {{Gateway.Service_HostAddress}}/api/identity/users
+Accept: application/json
+Authorization: Bearer not-a-jwt
+
+### Pass-through: valid JWT shape, forwarded to Identity Service
+GET {{Gateway.Service_HostAddress}}/api/identity/users
+Accept: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+
+### Pass-through: valid JWT shape, forwarded to Resource Service
+GET {{Gateway.Service_HostAddress}}/api/resource/weatherforecast
+Accept: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
