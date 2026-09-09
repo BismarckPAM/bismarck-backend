@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using AuthorizationService.Models;
 
 namespace AuthorizationService.Clients;
 
@@ -10,7 +11,7 @@ public sealed class IdentityServiceClient(
     ILogger<IdentityServiceClient> logger,
     IHttpContextAccessor httpContextAccessor) : IIdentityServiceClient
 {
-    public async Task<IdentityUser?> GetUserRoleAsync(
+    public async Task<ServiceLookupResult<IdentityUser>> GetUserRoleAsync(
         Guid userId,
         string? accessToken = null,
         CancellationToken cancellationToken = default)
@@ -38,7 +39,9 @@ public sealed class IdentityServiceClient(
                     "Identity Service returned {StatusCode} for user {UserId}; treating the user as unverified.",
                     response.StatusCode,
                     userId);
-                return null;
+                return new(null, response.StatusCode == HttpStatusCode.NotFound
+                    ? AuthorizationDenialReason.USER_NOT_FOUND
+                    : AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
             }
 
             if (!response.IsSuccessStatusCode)
@@ -47,15 +50,15 @@ public sealed class IdentityServiceClient(
                     "Identity Service returned unexpected status {StatusCode} for user {UserId}; treating the user as unverified.",
                     response.StatusCode,
                     userId);
-                return null;
+                return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
             }
 
             var user = await response.Content.ReadFromJsonAsync<IdentityUserResponse>(
                 cancellationToken);
 
             return user is null
-                ? null
-                : new IdentityUser(user.Id, user.RoleId, user.RoleName, user.IsActive);
+                ? new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED)
+                : new(new IdentityUser(user.Id, user.RoleId, user.RoleName, user.IsActive));
         }
         catch (HttpRequestException exception)
         {
@@ -63,7 +66,7 @@ public sealed class IdentityServiceClient(
                 exception,
                 "Identity Service is unreachable for user {UserId}; treating the user as unverified.",
                 userId);
-            return null;
+            return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
         }
         catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -71,7 +74,7 @@ public sealed class IdentityServiceClient(
                 exception,
                 "Identity Service timed out for user {UserId}; treating the user as unverified.",
                 userId);
-            return null;
+            return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
         }
     }
 

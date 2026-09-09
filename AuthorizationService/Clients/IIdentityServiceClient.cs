@@ -1,8 +1,10 @@
+using AuthorizationService.Models;
+
 namespace AuthorizationService.Clients;
 
 public interface IIdentityServiceClient
 {
-    Task<IdentityUser?> GetUserRoleAsync(
+    Task<ServiceLookupResult<IdentityUser>> GetUserRoleAsync(
         Guid userId,
         string? accessToken = null,
         CancellationToken cancellationToken = default);
