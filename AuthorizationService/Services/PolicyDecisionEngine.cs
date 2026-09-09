@@ -18,7 +18,10 @@ public sealed class PolicyDecisionEngine(AuthorizationDbContext dbContext)
             ["DEPLOY_BUILD"] = 3,
             ["DB_MIGRATION"] = 4,
             ["CONFIG_WRITE"] = 4,
+            ["ADMIN_WRITE"] = 4,
+            ["SCHEMA_UPDATE"] = 4,
             ["ROOT_ACCESS"] = 5,
+            ["ROOT"] = 5,
             ["DROP_TABLE"] = 5
         };
 
