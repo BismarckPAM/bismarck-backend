@@ -4,13 +4,10 @@ on:
   push:
     branches:
       - deploy/production
-      - main
 
   pull_request:
     branches:
       - deploy/production
-      - main
-
 
 jobs:
 
