@@ -400,3 +400,89 @@ public sealed class AuthorizationClientTests
             Task.FromException<HttpResponseMessage>(exception);
     }
 }
+
+public sealed class AccessPoliciesControllerTests
+{
+    [Fact]
+    public async Task PolicyCrud_CreatesReadsUpdatesAndDeactivatesPolicy()
+    {
+        await using var context = CreateContext();
+        var controller = new AccessPoliciesController(context);
+        var request = new AccessPolicyRequest
+        {
+            Role = "Developer",
+            ResourceType = "VM",
+            Environment = "Development",
+            Criticality = "Low",
+            MaxAccessLevel = 3
+        };
+
+        var createResult = await controller.Create(request, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdPolicy = Assert.IsType<AccessPolicyResponse>(created.Value);
+        Assert.Equal("DEVELOPER", createdPolicy.Role);
+        Assert.Equal("VM", createdPolicy.ResourceType);
+        Assert.True(createdPolicy.IsActive);
+
+        var getResult = await controller.GetById(createdPolicy.Id, CancellationToken.None);
+        var fetched = Assert.IsType<OkObjectResult>(getResult.Result);
+        Assert.Equal(createdPolicy.Id, Assert.IsType<AccessPolicyResponse>(fetched.Value).Id);
+
+        var updateResult = await controller.Update(
+            createdPolicy.Id,
+            new AccessPolicyRequest
+            {
+                Role = "Developer",
+                ResourceType = "VM",
+                Environment = "Development",
+                Criticality = "Low",
+                MaxAccessLevel = 4
+            },
+            CancellationToken.None);
+        var updated = Assert.IsType<OkObjectResult>(updateResult.Result);
+        Assert.Equal(4, Assert.IsType<AccessPolicyResponse>(updated.Value).MaxAccessLevel);
+
+        var deleteResult = await controller.Delete(createdPolicy.Id, CancellationToken.None);
+        var deleted = Assert.IsType<OkObjectResult>(deleteResult.Result);
+        Assert.False(Assert.IsType<AccessPolicyResponse>(deleted.Value).IsActive);
+        Assert.False((await context.AccessPolicies.SingleAsync()).IsActive);
+    }
+
+    [Fact]
+    public async Task Create_WhenPolicyKeyAlreadyExists_ReturnsBadRequest()
+    {
+        await using var context = CreateContext(new AccessPolicy
+        {
+            Role = "DEVELOPER",
+            ResourceType = "VM",
+            Environment = "DEVELOPMENT",
+            Criticality = "LOW",
+            MaxAccessLevel = 3
+        });
+        var controller = new AccessPoliciesController(context);
+
+        var result = await controller.Create(
+            new AccessPolicyRequest
+            {
+                Role = "developer",
+                ResourceType = "vm",
+                Environment = "development",
+                Criticality = "low",
+                MaxAccessLevel = 4
+            },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    private static AuthorizationDbContext CreateContext(params AccessPolicy[] policies)
+    {
+        var options = new DbContextOptionsBuilder<AuthorizationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var context = new AuthorizationDbContext(options);
+        context.AccessPolicies.AddRange(policies);
+        context.SaveChanges();
+        return context;
+    }
+}

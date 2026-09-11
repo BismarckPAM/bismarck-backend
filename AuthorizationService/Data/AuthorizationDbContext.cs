@@ -14,14 +14,16 @@ public sealed class AuthorizationDbContext(DbContextOptions<AuthorizationDbConte
         {
             entity.HasKey(policy => policy.Id);
             entity.Property(policy => policy.Role).HasMaxLength(100).IsRequired();
+            entity.Property(policy => policy.ResourceType).HasMaxLength(100).IsRequired();
             entity.Property(policy => policy.Environment).HasMaxLength(50).IsRequired();
             entity.Property(policy => policy.Criticality).HasMaxLength(20).IsRequired();
             entity.HasIndex(policy => new
             {
                 policy.Role,
+                policy.ResourceType,
                 policy.Environment,
                 policy.Criticality
-            });
+            }).IsUnique();
             entity.ToTable(table => table.HasCheckConstraint(
                 "CK_AccessPolicies_MaxAccessLevel",
                 "\"MaxAccessLevel\" BETWEEN 0 AND 5"));
