@@ -47,6 +47,11 @@ namespace AuthorizationService.Migrations
                     b.Property<bool>("RequiresApprovalForElevated")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -54,7 +59,8 @@ namespace AuthorizationService.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Role", "Environment", "Criticality");
+                    b.HasIndex("Role", "ResourceType", "Environment", "Criticality")
+                        .IsUnique();
 
                     b.ToTable("AccessPolicies", t =>
                         {
