@@ -4,6 +4,7 @@ public sealed class AccessPolicy
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Role { get; set; } = string.Empty;
+    public string ResourceType { get; set; } = string.Empty;
     public string Environment { get; set; } = string.Empty;
     public string Criticality { get; set; } = string.Empty;
     public int MaxAccessLevel { get; set; }
