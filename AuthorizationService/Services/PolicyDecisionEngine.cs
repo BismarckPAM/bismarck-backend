@@ -50,6 +50,8 @@ public sealed class PolicyDecisionEngine(AuthorizationDbContext dbContext)
                 .FirstOrDefaultAsync(item =>
                     item.IsActive
                     && item.Role.ToUpper() == user.Role.ToUpper()
+                    && (item.ResourceType == string.Empty
+                        || item.ResourceType.ToUpper() == resource.Type.ToUpper())
                     && item.Environment.ToUpper() == resource.Environment.ToUpper()
                     && item.Criticality.ToUpper() == resource.Criticality.ToUpper(),
                     cancellationToken);
