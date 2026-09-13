@@ -1,4 +1,46 @@
 services:
+  # ========================================================
+  # Identity Database (PostgreSQL)
+  # ========================================================
+  identity-db:
+    image: postgres:16-alpine
+    container_name: identity-db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${IDENTITY_DB_NAME}
+    ports:
+      - "${IDENTITY_DB_PORT}:5432"
+    volumes:
+      - identity_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${IDENTITY_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ========================================================
+  # Resource Database (PostgreSQL)
+  # ========================================================
+  resource-db:
+    image: postgres:16-alpine
+    container_name: resource-db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${RESOURCE_DB_NAME}
+    ports:
+      - "${RESOURCE_DB_PORT}:5432"
+    volumes:
+      - resource_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${RESOURCE_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   identity-svc:
     build:
       context: ./identity
@@ -9,7 +51,14 @@ services:
     # network as http://identity-service:8080.
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__IdentityDb=${ConnectionStrings__IdentityDb}
+      # Confirmed against identity/appsettings.json's ConnectionStrings:IdentityDatabase key.
+      - ConnectionStrings__IdentityDatabase=Host=identity-db;Port=5432;Database=${IDENTITY_DB_NAME};Username=${DB_USER}
+      - IDENTITY_DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SIGNING_KEY=${JWT_SIGNING_KEY}
+      - FRONTEND_ORIGIN=${ALLOWED_ORIGINS}
+    depends_on:
+      identity-db:
+        condition: service_healthy
     restart: unless-stopped
 
   resource-svc:
@@ -20,9 +69,14 @@ services:
     # No host port mapping — see identity-service note above.
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=resource-db;Database=${RESOURCE_DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
+      # Confirmed against resource/appsettings.json's ConnectionStrings:ResourceDatabase key.
+      - ConnectionStrings__ResourceDatabase=Host=resource-db;Port=5432;Database=${RESOURCE_DB_NAME};Username=${DB_USER}
+      - RESOURCE_DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SIGNING_KEY=${JWT_SIGNING_KEY}
+      - FRONTEND_ORIGIN=${ALLOWED_ORIGINS}
     depends_on:
-      - resource-db
+      resource-db:
+        condition: service_healthy
 
   # --- API Gateway ---
   # Single external entry point for browser/CLI/third-party clients. All
@@ -45,9 +99,60 @@ services:
       # Frontend origin(s) the gateway's CORS policy will accept.
       - AllowedOrigins__0=${ALLOWED_ORIGINS}
     depends_on:
-      - identity-service
-      - resource-service
+      # Fixed: depends_on must reference the compose service names
+      # (identity-svc / resource-svc), not the container_name overrides
+      # (identity-service / resource-service) used above.
+      - identity-svc
+      - resource-svc
+
+  # ========================================================
+  # Apache Kafka (KRaft Mode - ZooKeeper-less)
+  # ========================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    ports:
+      - "${KAFKA_PORT:-29092}:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:29092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      CLUSTER_ID: '4L622nShTUiDwyCGsqZSmw'
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========================================================
+  # Provectus Kafka UI (Cluster & Message Inspector)
+  # ========================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "${KAFKA_UI_PORT:-8085}:8080"
+    environment:
+      DYNAMIC_CONFIG_ENABLED: 'true'
+      KAFKA_CLUSTERS_0_NAME: 'bismarck-local-cluster'
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: '${KAFKA_BOOTSTRAP_SERVERS}'
+    depends_on:
+      kafka:
+        condition: service_healthy
 
 volumes:
   identity_data:
   resource_data:
+  kafka_data:

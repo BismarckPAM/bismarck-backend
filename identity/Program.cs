@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Text;
+using Confluent.Kafka;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -91,6 +92,50 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+var kafkaBootstrap = builder.Configuration["Kafka:BootstrapServers"] ?? "kafka:9092";
+
+app.MapPost("/api/test/kafka/publish", async (string message) =>
+{
+    var config = new ProducerConfig { BootstrapServers = kafkaBootstrap };
+    using var producer = new ProducerBuilder<Null, string>(config).Build();
+    var result = await producer.ProduceAsync("pam.test.events", new Message<Null, string>
+    {
+        Value = message
+    });
+    return Results.Ok(new
+    {
+        status = "Published",
+        topic = result.Topic,
+        partition = result.Partition.Value,
+        offset = result.Offset.Value,
+        payload = message
+    });
+});
+
+app.MapGet("/api/test/kafka/consume", () =>
+{
+    var config = new ConsumerConfig
+    {
+        BootstrapServers = kafkaBootstrap,
+        GroupId = "pam-test-consumer-group",
+        AutoOffsetReset = AutoOffsetReset.Earliest,
+        EnableAutoCommit = true
+    };
+    using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
+    consumer.Subscribe("pam.test.events");
+    var consumeResult = consumer.Consume(TimeSpan.FromSeconds(15));
+    if (consumeResult == null)
+        return Results.Ok(new { message = "No messages found within timeout window." });
+
+    return Results.Ok(new
+    {
+        status = "Consumed",
+        topic = consumeResult.Topic,
+        offset = consumeResult.Offset.Value,
+        receivedMessage = consumeResult.Message.Value
+    });
+});
 
 app.Run();
 
