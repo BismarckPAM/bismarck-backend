@@ -374,6 +374,28 @@ public sealed class AuthorizationClientTests
     }
 
     [Fact]
+    public async Task IdentityClient_WhenUpstreamReturnsInvalidJson_FailsClosed()
+    {
+        using var httpClient = new HttpClient(new ResponseHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("not-json")
+            }))
+        {
+            BaseAddress = new Uri("https://identity.test/")
+        };
+        var client = new IdentityServiceClient(
+            httpClient,
+            NullLogger<IdentityServiceClient>.Instance,
+            new HttpContextAccessor());
+
+        var result = await client.GetUserRoleAsync(Guid.NewGuid());
+
+        Assert.Null(result.Value);
+        Assert.Equal(AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED, result.FailureReason);
+    }
+
+    [Fact]
     public async Task ResourceClient_WhenUpstreamReturnsError_FailsClosed()
     {
         using var httpClient = new HttpClient(new ThrowingHandler(
@@ -398,6 +420,14 @@ public sealed class AuthorizationClientTests
             HttpRequestMessage request,
             CancellationToken cancellationToken) =>
             Task.FromException<HttpResponseMessage>(exception);
+    }
+
+    private sealed class ResponseHandler(HttpResponseMessage response) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(response);
     }
 }
 
