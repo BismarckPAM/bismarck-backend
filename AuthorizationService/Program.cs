@@ -82,7 +82,13 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Enviro
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+if (!string.Equals(
+        Environment.GetEnvironmentVariable("DISABLE_HTTPS_REDIRECTION"),
+        "true",
+        StringComparison.OrdinalIgnoreCase))
+{
+    app.UseHttpsRedirection();
+}
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 app.MapHealthChecks("/health");
 app.MapControllers();
