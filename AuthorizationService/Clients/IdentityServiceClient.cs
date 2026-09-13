@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using AuthorizationService.Models;
 
@@ -73,6 +74,14 @@ public sealed class IdentityServiceClient(
             logger.LogWarning(
                 exception,
                 "Identity Service timed out for user {UserId}; treating the user as unverified.",
+                userId);
+            return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
+        }
+        catch (JsonException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Identity Service returned an invalid response for user {UserId}; treating the user as unverified.",
                 userId);
             return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
         }
