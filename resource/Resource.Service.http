@@ -1,6 +1,46 @@
 @Resource.Service_HostAddress = http://localhost:5039
 
-GET {{Resource.Service_HostAddress}}/weatherforecast/
+### Create a new resource
+POST {{Resource.Service_HostAddress}}/api/resources
+Content-Type: application/json
+
+{
+  "type": "VirtualMachine",
+  "owner": "infrastructure-team",
+  "environment": "production",
+  "criticality": "HIGH"
+}
+
+###
+
+### Get all resources
+GET {{Resource.Service_HostAddress}}/api/resources
+Accept: application/json
+
+###
+
+### Get a resource by ID (replace with valid GUID)
+GET {{Resource.Service_HostAddress}}/api/resources/00000000-0000-0000-0000-000000000000
+Accept: application/json
+
+###
+
+### Update a resource by ID (replace with valid GUID)
+PUT {{Resource.Service_HostAddress}}/api/resources/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+
+{
+  "type": "VirtualMachine",
+  "owner": "security-team",
+  "environment": "staging",
+  "criticality": "MEDIUM",
+  "isActive": true
+}
+
+###
+
+### Delete a resource by ID (soft delete, replace with valid GUID)
+DELETE {{Resource.Service_HostAddress}}/api/resources/00000000-0000-0000-0000-000000000000
 Accept: application/json
 
 ###
