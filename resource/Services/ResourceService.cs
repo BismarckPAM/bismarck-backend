@@ -14,8 +14,11 @@ public class ResourceService(
     ResourceDbContext dbContext,
     IMapper mapper,
     IValidator<CreateResourceRequest> createValidator,
-    IValidator<UpdateResourceRequest> updateValidator) : IResourceService
+    IValidator<UpdateResourceRequest> updateValidator,
+    IDomainEventPublisher? domainEventPublisher = null) : IResourceService
 {
+    private readonly IDomainEventPublisher eventPublisher = domainEventPublisher ?? new NullDomainEventPublisher();
+
     public async Task<ResourceResponse> CreateAsync(CreateResourceRequest request)
     {
         if (request is null)
@@ -30,7 +33,22 @@ public class ResourceService(
         dbContext.Resources.Add(resource);
         await dbContext.SaveChangesAsync();
 
-        return mapper.Map<ResourceResponse>(resource);
+        var response = mapper.Map<ResourceResponse>(resource);
+        await eventPublisher.PublishAsync(new DomainEventMessage(
+            "resource-created",
+            response.Id,
+            DateTimeOffset.UtcNow,
+            new
+            {
+                response.Type,
+                response.Owner,
+                response.Environment,
+                response.Criticality,
+                response.IsActive,
+                response.CreatedAt
+            }));
+
+        return response;
     }
 
     public async Task<IEnumerable<ResourceResponse>> GetAllAsync()
@@ -77,7 +95,22 @@ public class ResourceService(
         mapper.Map(request, resource);
         await dbContext.SaveChangesAsync();
 
-        return mapper.Map<ResourceResponse>(resource);
+        var response = mapper.Map<ResourceResponse>(resource);
+        await eventPublisher.PublishAsync(new DomainEventMessage(
+            "resource-updated",
+            response.Id,
+            DateTimeOffset.UtcNow,
+            new
+            {
+                response.Type,
+                response.Owner,
+                response.Environment,
+                response.Criticality,
+                response.IsActive,
+                response.CreatedAt
+            }));
+
+        return response;
     }
 
     public async Task<ResourceResponse> DeleteAsync(Guid id)
