@@ -2,6 +2,7 @@ using FluentValidation;
 using Identity.Service.Data;
 using Identity.Service.Mappings;
 using Identity.Service.Middleware;
+using Identity.Service.Models;
 using Identity.Service.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -77,6 +78,75 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+    dbContext.Database.Migrate();
+
+    var engineeringId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    var adminRoleId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    var developerRoleId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    var viewerRoleId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+    if (!dbContext.Departments.Any(department => department.Id == engineeringId))
+    {
+        dbContext.Departments.Add(new Department { Id = engineeringId, Name = "Engineering" });
+    }
+
+    SeedRole(dbContext, adminRoleId, "Admin");
+    SeedRole(dbContext, developerRoleId, "Developer");
+    SeedRole(dbContext, viewerRoleId, "Viewer");
+
+    SeedUser(dbContext, Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111"), "QA Admin", "qa.admin@test.com", "QaTest@123", adminRoleId, engineeringId, true);
+    SeedUser(dbContext, Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222"), "QA Developer", "qa.developer@test.com", "QaTest@123", developerRoleId, engineeringId, true);
+    SeedUser(dbContext, Guid.Parse("cccccccc-3333-3333-3333-333333333333"), "QA Deactivated", "qa.deactivated@test.com", "QaTest@123", viewerRoleId, engineeringId, false);
+
+    dbContext.SaveChanges();
+}
+
 app.Run();
+
+static void SeedRole(IdentityDbContext dbContext, Guid id, string name)
+{
+    if (!dbContext.Roles.Any(role => role.Id == id))
+    {
+        dbContext.Roles.Add(new Role { Id = id, Name = name });
+    }
+}
+
+static void SeedUser(
+    IdentityDbContext dbContext,
+    Guid id,
+    string fullName,
+    string email,
+    string password,
+    Guid roleId,
+    Guid departmentId,
+    bool isActive)
+{
+    var user = dbContext.Users
+        .IgnoreQueryFilters()
+        .FirstOrDefault(user => user.Id == id || user.Email == email);
+
+    if (user is null)
+    {
+        dbContext.Users.Add(new User
+        {
+            Id = id,
+            FullName = fullName,
+            Email = email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            RoleId = roleId,
+            DepartmentId = departmentId,
+            IsActive = isActive
+        });
+        return;
+    }
+
+    user.FullName = fullName;
+    user.RoleId = roleId;
+    user.DepartmentId = departmentId;
+    user.IsActive = isActive;
+}
 
 public partial class Program { }

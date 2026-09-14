@@ -1,0 +1,107 @@
+services:
+
+  # -------------------------
+  # Identity Database
+  # -------------------------
+  identity-db:
+    image: postgres:16
+    container_name: identity-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${IDENTITY_DB_NAME}
+    ports:
+      - "${IDENTITY_DB_PORT}:5432"
+    volumes:
+      - identity_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # -------------------------
+  # Identity Service
+  # -------------------------
+  identity-svc:
+    build:
+      context: ./identity
+      dockerfile: Dockerfile
+    container_name: identity-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      # Identity Database
+      ConnectionStrings__IdentityDb: Host=identity-db;Port=5432;Database=${IDENTITY_DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
+
+      # Variables required by Identity Program.cs
+      IDENTITY_DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+
+    depends_on:
+      - identity-db
+    restart: unless-stopped
+
+  # -------------------------
+  # Resource Database
+  # -------------------------
+  resource-db:
+    image: postgres:16
+    container_name: resource-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${RESOURCE_DB_NAME}
+    ports:
+      - "${RESOURCE_DB_PORT}:5432"
+    volumes:
+      - resource_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # -------------------------
+  # Resource Service
+  # -------------------------
+  resource-svc:
+    build:
+      context: ./resource
+      dockerfile: Dockerfile
+    container_name: resource-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      # Resource Database
+      ConnectionStrings__DefaultConnection: Host=resource-db;Port=5432;Database=${RESOURCE_DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
+
+      # Variables required by Resource Program.cs
+      RESOURCE_DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+
+    depends_on:
+      - resource-db
+    restart: unless-stopped
+
+  # -------------------------
+  # API Gateway
+  # -------------------------
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: gateway
+    ports:
+      - "${GATEWAY_PORT}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      Services__Identity__Url: http://identity-service:8080
+      Services__Resource__Url: http://resource-service:8080
+
+      AllowedOrigins__0: ${ALLOWED_ORIGINS}
+
+    depends_on:
+      - identity-svc
+      - resource-svc
+    restart: unless-stopped
+
+# -------------------------
+# Volumes
+# -------------------------
+volumes:
+  identity_data:
+  resource_data:
