@@ -23,8 +23,8 @@ public class UserServiceTests
         var result = await service.CreateAsync(Request(role.Id, department.Id));
 
         Assert.Equal("person@example.com", result.Email);
-        Assert.Equal("Admin", result.RoleName);
-        Assert.Equal("Engineering", result.DepartmentName);
+        Assert.Equal("Admin", result.Role);
+        Assert.Equal("Engineering", result.Department);
         Assert.Single(await service.GetAllAsync());
         Assert.Equal(result.Id, (await service.GetByIdAsync(result.Id)).Id);
     }
