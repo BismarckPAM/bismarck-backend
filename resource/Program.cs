@@ -96,6 +96,7 @@ builder.Services.AddDbContext<ResourceDbContext>(options =>
 builder.Services.AddAutoMapper(config => config.AddProfile<MappingProfile>());
 builder.Services.AddValidatorsFromAssemblyContaining<CreateResourceRequestValidator>();
 builder.Services.AddScoped<IResourceService, ResourceService>();
+builder.Services.AddSingleton<IDomainEventPublisher, KafkaDomainEventPublisher>();
 
 var app = builder.Build();
 
