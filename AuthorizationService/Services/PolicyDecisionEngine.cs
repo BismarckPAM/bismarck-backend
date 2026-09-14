@@ -63,6 +63,9 @@ public sealed class PolicyDecisionEngine(AuthorizationDbContext dbContext)
         if (requiredLevel > maxAllowedLevel)
             return AuthorizationDecisionResult.Deny(AuthorizationDenialReason.INSUFFICIENT_ROLE_PERMISSIONS);
 
+        if (user.Role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            return AuthorizationDecisionResult.Allow(TimeSpan.FromHours(2));
+
         var isProduction = resource.Environment.Equals("PROD", StringComparison.OrdinalIgnoreCase)
             || resource.Environment.Equals("PRODUCTION", StringComparison.OrdinalIgnoreCase);
         var isCritical = resource.Criticality.Equals("CRITICAL", StringComparison.OrdinalIgnoreCase);
