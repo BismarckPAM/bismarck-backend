@@ -152,7 +152,7 @@ services:
       # Internal Docker Compose service URLs.
       Services__Identity__Url: http://identity_svc:8080
       Services__Resource__Url: http://resource_svc:8080
-      Services__Authorization__Url=http://authorization-svc:8080
+      Services__Authorization__Url: http://authorization-svc:8080
 
       # Frontend origin(s) accepted by the gateway CORS policy.
       AllowedOrigins__0: ${ALLOWED_ORIGINS}
