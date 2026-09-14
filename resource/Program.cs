@@ -8,6 +8,7 @@ using Resource.Service.Data;
 using Resource.Service.Filters;
 using Resource.Service.Mappings;
 using Resource.Service.Middleware;
+using Resource.Service.Models;
 using Resource.Service.Services;
 using Resource.Service.Validators;
 using System.Text;
@@ -115,6 +116,50 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ResourceDbContext>();
+    dbContext.Database.Migrate();
+
+    SeedResource(dbContext, Guid.Parse("dddddddd-1111-1111-1111-111111111111"), "VM", "QA", "DEV", ResourceCriticality.LOW);
+    SeedResource(dbContext, Guid.Parse("eeeeeeee-2222-2222-2222-222222222222"), "VM", "QA", "PROD", ResourceCriticality.CRITICAL);
+
+    dbContext.SaveChanges();
+}
+
 app.Run();
+
+static void SeedResource(
+    ResourceDbContext dbContext,
+    Guid id,
+    string type,
+    string owner,
+    string environment,
+    ResourceCriticality criticality)
+{
+    var resource = dbContext.Resources
+        .IgnoreQueryFilters()
+        .FirstOrDefault(resource => resource.Id == id);
+
+    if (resource is null)
+    {
+        dbContext.Resources.Add(new Resource.Service.Models.Resource
+        {
+            Id = id,
+            Type = type,
+            Owner = owner,
+            Environment = environment,
+            Criticality = criticality,
+            IsActive = true
+        });
+        return;
+    }
+
+    resource.Type = type;
+    resource.Owner = owner;
+    resource.Environment = environment;
+    resource.Criticality = criticality;
+    resource.IsActive = true;
+}
 
 public partial class Program { }
