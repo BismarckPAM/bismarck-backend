@@ -40,6 +40,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<MappingProfile>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddSingleton<IDomainEventPublisher, KafkaDomainEventPublisher>();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var signingKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY") ?? jwtSettings["SigningKey"];
