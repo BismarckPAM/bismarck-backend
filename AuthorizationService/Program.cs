@@ -87,6 +87,48 @@ app.UseMiddleware<ExceptionHandlerMiddleware>();
 app.MapHealthChecks("/health");
 app.MapControllers();
 
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AuthorizationDbContext>();
+    dbContext.Database.Migrate();
+
+    SeedPolicy(dbContext, "ADMIN", "DEV", "LOW", 5);
+    SeedPolicy(dbContext, "ADMIN", "PROD", "CRITICAL", 5);
+    SeedPolicy(dbContext, "DEVELOPER", "DEV", "LOW", 3);
+    SeedPolicy(dbContext, "DEVELOPER", "PROD", "CRITICAL", 3);
+    SeedPolicy(dbContext, "VIEWER", "DEV", "LOW", 1);
+
+    dbContext.SaveChanges();
+}
+
 app.Run();
+
+static void SeedPolicy(
+    AuthorizationDbContext dbContext,
+    string role,
+    string environment,
+    string criticality,
+    int maxAccessLevel)
+{
+    var exists = dbContext.AccessPolicies.Any(policy =>
+        policy.Role == role &&
+        policy.Environment == environment &&
+        policy.Criticality == criticality);
+
+    if (exists)
+    {
+        return;
+    }
+
+    dbContext.AccessPolicies.Add(new AuthorizationService.Models.AccessPolicy
+    {
+        Role = role,
+        Environment = environment,
+        Criticality = criticality,
+        MaxAccessLevel = maxAccessLevel,
+        RequiresApprovalForElevated = true,
+        IsActive = true
+    });
+}
 
 public partial class Program { }

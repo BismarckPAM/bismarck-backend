@@ -1,33 +1,126 @@
 services:
+
+  # -------------------------
+  # Identity Database
+  # -------------------------
+  identity-db:
+    image: postgres:16
+    container_name: identity-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${IDENTITY_DB_NAME}
+    ports:
+      - "${IDENTITY_DB_PORT}:5432"
+    volumes:
+      - identity_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # -------------------------
+  # Identity Service
+  # -------------------------
   identity-svc:
     build:
       context: ./identity
       dockerfile: Dockerfile
     container_name: identity-service
-    # No host port mapping: the API Gateway is the only entry point from outside
-    # the compose network (architecture rule #4). Reachable on the internal
-    # network as http://identity-service:8080.
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__IdentityDb=${ConnectionStrings__IdentityDb}
+      ASPNETCORE_ENVIRONMENT: Development
+
+      # Identity Database
+      ConnectionStrings__IdentityDatabase: Host=identity-db;Port=5432;Database=${IDENTITY_DB_NAME};Username=${DB_USER}
+
+      # Variables required by Identity Program.cs
+      IDENTITY_DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+
+    depends_on:
+      - identity-db
     restart: unless-stopped
 
+  # -------------------------
+  # Resource Database
+  # -------------------------
+  resource-db:
+    image: postgres:16
+    container_name: resource-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${RESOURCE_DB_NAME}
+    ports:
+      - "${RESOURCE_DB_PORT}:5432"
+    volumes:
+      - resource_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # -------------------------
+  # Resource Service
+  # -------------------------
   resource-svc:
     build:
       context: ./resource
       dockerfile: Dockerfile
     container_name: resource-service
-    # No host port mapping — see identity-service note above.
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=resource-db;Database=${RESOURCE_DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
+      ASPNETCORE_ENVIRONMENT: Development
+
+      # Resource Database
+      ConnectionStrings__ResourceDatabase: Host=resource-db;Port=5432;Database=${RESOURCE_DB_NAME};Username=${DB_USER}
+
+      # Variables required by Resource Program.cs
+      RESOURCE_DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      JwtSettings__Issuer: Identity.Service
+      JwtSettings__Audience: Bismarck.Services
+
     depends_on:
       - resource-db
+    restart: unless-stopped
 
-  # --- API Gateway ---
-  # Single external entry point for browser/CLI/third-party clients. All
-  # external traffic goes through here; services are only reachable on the
-  # internal Docker network.
+  # -------------------------
+  # Authorization Database
+  # -------------------------
+  authorization-db:
+    image: postgres:16
+    container_name: authorization-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: authorization_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - authorization_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # -------------------------
+  # Authorization Service
+  # -------------------------
+  authorization-svc:
+    build:
+      context: ./AuthorizationService
+      dockerfile: Dockerfile
+    container_name: authorization-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      # Authorization Database
+      ConnectionStrings__AuthorizationDatabase: Host=authorization-db;Port=5432;Database=authorization_db;Username=${DB_USER};Password=${DB_PASSWORD}
+
+      # Internal Docker service URLs
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+      RESOURCE_SERVICE_URL: http://resource-service:8080
+
+    depends_on:
+      - authorization-db
+      - identity-svc
+      - resource-svc
+    restart: unless-stopped
+
+  # -------------------------
+  # API Gateway
+  # -------------------------
   gateway:
     build:
       context: ./gateway
@@ -36,18 +129,25 @@ services:
     ports:
       - "${GATEWAY_PORT}:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      # Downstream URLs come from the Services config section (env-var friendly:
-      # Services__Identity__Url, Services__Resource__Url). These use the Docker
-      # Compose service names on the internal network.
-      - Services__Identity__Url=http://identity-service:8080
-      - Services__Resource__Url=http://resource-service:8080
-      # Frontend origin(s) the gateway's CORS policy will accept.
-      - AllowedOrigins__0=${ALLOWED_ORIGINS}
-    depends_on:
-      - identity-service
-      - resource-service
+      ASPNETCORE_ENVIRONMENT: Development
 
+      Services__Identity__Url: http://identity-service:8080
+      Services__Resource__Url: http://resource-service:8080
+      Services__Authorization__Url: http://authorization-service:8080
+
+      AllowedOrigins__0: ${ALLOWED_ORIGINS}
+
+    depends_on:
+      - identity-svc
+      - resource-svc
+      - authorization-svc
+    restart: unless-stopped
+
+
+# -------------------------
+# Volumes
+# -------------------------
 volumes:
   identity_data:
   resource_data:
+  authorization_data:
