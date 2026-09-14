@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Resource.Service.Tests/**/*.cs" />
+    <Compile Remove="Resource.Service.IntegrationTests/**/*.cs" />
     <PackageReference Include="AutoMapper" Version="14.0.0" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
