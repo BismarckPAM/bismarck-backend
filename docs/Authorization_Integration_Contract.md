@@ -65,7 +65,7 @@ Successful response (`200 OK`):
 {
   "id": "11111111-1111-1111-1111-111111111111",
   "roleId": "33333333-3333-3333-3333-333333333333",
-  "roleName": "Developer",
+  "role": "Developer",
   "isActive": true
 }
 ```
