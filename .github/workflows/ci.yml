@@ -193,6 +193,16 @@ jobs:
           GATEWAY_PORT=8080
 
           ALLOWED_ORIGINS=http://localhost:3000
+
+          # Required by identity_svc/resource_svc at startup (throws if missing).
+          # CI-only value — never a real secret.
+          JWT_SIGNING_KEY=ci-only-signing-key-not-a-real-secret
+
+          KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+          KAFKA_EXTERNAL_BOOTSTRAP_SERVERS=localhost:29092
+          KAFKA_PORT=29092
+          KAFKA_UI_PORT=8085
+          KAFKA_TEST_TOPIC=pam.test.events
           EOF
 
 
@@ -219,6 +229,40 @@ jobs:
       - name: Build Docker Compose Services
         run: |
           docker compose build
+
+
+      # --------------------------------------------------------
+      # Start the Full Stack (SCRUM-27 AC-5)
+      #
+      # Verifies the entire stack — all databases, Kafka, all four
+      # .NET services, and the gateway — actually starts and reaches
+      # a healthy state together, not just that images build.
+      # --------------------------------------------------------
+
+      - name: Start Full Stack
+        run: |
+          docker compose up -d
+
+
+      # --------------------------------------------------------
+      # Wait for All Services to Report Healthy
+      #
+      # Polls docker compose ps for up to 3 minutes. Fails fast and
+      # dumps logs from any service still unhealthy at timeout, so a
+      # CI failure here points directly at the broken service.
+      # --------------------------------------------------------
+
+      - name: Wait for Healthy Stack
+        run: |
+          timeout 180 bash -c '
+            until [ -z "$(docker compose ps --status running --format json | \
+              python3 -c "import sys,json; [print(1) for l in sys.stdin if l.strip() and json.loads(l).get(\"Health\") not in (\"healthy\",\"\")]")" ]; do
+              echo "Waiting for all services to become healthy...";
+              docker compose ps;
+              sleep 5;
+            done
+          ' || (echo "Stack did not become healthy in time. Dumping logs:"; docker compose logs; exit 1)
+          docker compose ps
 
 
       # --------------------------------------------------------

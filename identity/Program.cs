@@ -1,18 +1,36 @@
 using FluentValidation;
 using Identity.Service.Data;
+using Identity.Service.DTOs;
+using Identity.Service.HealthChecks;
 using Identity.Service.Mappings;
 using Identity.Service.Middleware;
 using Identity.Service.Services;
+using Identity.Service.Validators;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Text;
+using System.Text.Json;
+using Confluent.Kafka;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var allowedOrigin = builder.Configuration["FRONTEND_ORIGIN"] ?? "http://localhost:5173";
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(allowedOrigin)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -37,9 +55,16 @@ builder.Services.AddDbContext<IdentityDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddAutoMapper(config => config.AddProfile<MappingProfile>());
 builder.Services.AddValidatorsFromAssemblyContaining<MappingProfile>();
+builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
+
+var kafkaBootstrap = builder.Configuration["Kafka:BootstrapServers"] ?? "kafka:9092";
+builder.Services.AddSingleton(new KafkaHealthCheck(kafkaBootstrap));
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<IdentityDbContext>("identity-database")
+    .AddCheck<KafkaHealthCheck>("kafka");
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var signingKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY") ?? jwtSettings["SigningKey"];
@@ -79,10 +104,86 @@ if (!string.Equals(
     app.UseHttpsRedirection();
 }
 app.UseMiddleware<ExceptionHandlerMiddleware>();
+app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = HealthCheckResponseWriter.WriteResponse
+});
+
+app.MapPost("/api/test/kafka/publish", async (string message) =>
+{
+    var config = new ProducerConfig { BootstrapServers = kafkaBootstrap };
+    using var producer = new ProducerBuilder<Null, string>(config).Build();
+    var result = await producer.ProduceAsync("pam.test.events", new Message<Null, string>
+    {
+        Value = message
+    });
+    return Results.Ok(new
+    {
+        status = "Published",
+        topic = result.Topic,
+        partition = result.Partition.Value,
+        offset = result.Offset.Value,
+        payload = message
+    });
+});
+
+app.MapGet("/api/test/kafka/consume", () =>
+{
+    var config = new ConsumerConfig
+    {
+        BootstrapServers = kafkaBootstrap,
+        GroupId = "pam-test-consumer-group",
+        AutoOffsetReset = AutoOffsetReset.Earliest,
+        EnableAutoCommit = true
+    };
+    using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
+    consumer.Subscribe("pam.test.events");
+    var consumeResult = consumer.Consume(TimeSpan.FromSeconds(15));
+    if (consumeResult == null)
+        return Results.Ok(new { message = "No messages found within timeout window." });
+
+    return Results.Ok(new
+    {
+        status = "Consumed",
+        topic = consumeResult.Topic,
+        offset = consumeResult.Offset.Value,
+        receivedMessage = consumeResult.Message.Value
+    });
+});
 
 app.Run();
 
 public partial class Program { }
+
+/// <summary>
+/// Writes a structured JSON health report (overall status plus a per-check
+/// breakdown) instead of the framework's default plain-text "Healthy"/
+/// "Unhealthy" response, so /health genuinely reports individual
+/// dependency status (DB, Kafka) rather than just an aggregate string.
+/// </summary>
+internal static class HealthCheckResponseWriter
+{
+    public static Task WriteResponse(HttpContext context, HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+
+        var payload = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                description = entry.Value.Description,
+                durationMs = entry.Value.Duration.TotalMilliseconds
+            }),
+            totalDurationMs = report.TotalDuration.TotalMilliseconds
+        };
+
+        return context.Response.WriteAsync(JsonSerializer.Serialize(payload));
+    }
+}

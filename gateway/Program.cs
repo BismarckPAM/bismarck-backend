@@ -1,4 +1,7 @@
 using Gateway.Service.Middleware;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Text.Json;
 using Yarp.ReverseProxy;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,7 +49,40 @@ var app = builder.Build();
 // responses are handled, then the gateway's own auth-header gate, then YARP.
 app.UseCors("Frontend");
 app.UseMiddleware<AuthorizationHeaderValidatorMiddleware>();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = HealthCheckResponseWriter.WriteResponse
+});
 app.MapReverseProxy();
 
 app.Run();
+
+/// <summary>
+/// Writes a structured JSON health report, matching the response shape used
+/// by identity/resource/AuthorizationService's /health endpoints. The
+/// gateway has no direct database or Kafka dependency of its own, so its
+/// "checks" array is empty by design — this just keeps the contract shape
+/// consistent for anything polling /health across all four services.
+/// </summary>
+internal static class HealthCheckResponseWriter
+{
+    public static Task WriteResponse(HttpContext context, HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+
+        var payload = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                description = entry.Value.Description,
+                durationMs = entry.Value.Duration.TotalMilliseconds
+            }),
+            totalDurationMs = report.TotalDuration.TotalMilliseconds
+        };
+
+        return context.Response.WriteAsync(JsonSerializer.Serialize(payload));
+    }
+}
