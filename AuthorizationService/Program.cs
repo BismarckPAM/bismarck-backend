@@ -1,11 +1,15 @@
 using AuthorizationService.Data;
 using AuthorizationService.Clients;
+using AuthorizationService.HealthChecks;
 using AuthorizationService.Middleware;
 using AuthorizationService.Services;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Polly;
 using Polly.Extensions.Http;
 using Serilog;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -70,9 +74,12 @@ var connectionString = builder.Configuration.GetConnectionString("AuthorizationD
 builder.Services.AddDbContext<AuthorizationDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddScoped<IPolicyDecisionEngine, PolicyDecisionEngine>();
+var kafkaBootstrap = builder.Configuration["Kafka:BootstrapServers"] ?? "kafka:9092";
+builder.Services.AddSingleton(new KafkaHealthCheck(kafkaBootstrap));
 builder.Services
     .AddHealthChecks()
-    .AddDbContextCheck<AuthorizationDbContext>("authorization-database");
+    .AddDbContextCheck<AuthorizationDbContext>("authorization-database")
+    .AddCheck<KafkaHealthCheck>("kafka");
 
 var app = builder.Build();
 
@@ -90,9 +97,41 @@ if (!string.Equals(
     app.UseHttpsRedirection();
 }
 app.UseMiddleware<ExceptionHandlerMiddleware>();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = HealthCheckResponseWriter.WriteResponse
+});
 app.MapControllers();
 
 app.Run();
 
 public partial class Program { }
+
+/// <summary>
+/// Writes a structured JSON health report (overall status plus a per-check
+/// breakdown) instead of the framework's default plain-text response, so
+/// /health genuinely reports individual dependency status rather than just
+/// an aggregate string.
+/// </summary>
+internal static class HealthCheckResponseWriter
+{
+    public static Task WriteResponse(HttpContext context, HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+
+        var payload = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                description = entry.Value.Description,
+                durationMs = entry.Value.Duration.TotalMilliseconds
+            }),
+            totalDurationMs = report.TotalDuration.TotalMilliseconds
+        };
+
+        return context.Response.WriteAsync(JsonSerializer.Serialize(payload));
+    }
+}

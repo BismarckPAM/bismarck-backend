@@ -5,7 +5,7 @@ services:
   # ============================================================
 
   identity-db:
-    image: postgres:latest
+    image: postgres:16-alpine
     container_name: identity-db
 
     environment:
@@ -18,6 +18,12 @@ services:
 
     volumes:
       - identity_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${IDENTITY_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 
   identity_svc:
@@ -35,14 +41,31 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
 
-      ConnectionStrings__DefaultConnection: >-
-        Host=identity-db;
-        Database=${IDENTITY_DB_NAME};
-        Username=${DB_USER};
-        Password=${DB_PASSWORD}
+      # ConnectionStrings:IdentityDatabase is what identity/Program.cs
+      # actually reads (password appended separately via IDENTITY_DB_PASSWORD).
+      ConnectionStrings__IdentityDatabase: >-
+        Host=identity-db;Port=5432;Database=${IDENTITY_DB_NAME};Username=${DB_USER}
+      IDENTITY_DB_PASSWORD: ${DB_PASSWORD}
+
+      # Shared signing key — MUST match resource_svc's value exactly.
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+
+      FRONTEND_ORIGIN: ${ALLOWED_ORIGINS}
+
+      Kafka__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS}
 
     depends_on:
-      - identity-db
+      identity-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 
   # ============================================================
@@ -50,7 +73,7 @@ services:
   # ============================================================
 
   resource-db:
-    image: postgres:latest
+    image: postgres:16-alpine
     container_name: resource-db
 
     environment:
@@ -63,6 +86,12 @@ services:
 
     volumes:
       - resource_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${RESOURCE_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 
   resource_svc:
@@ -79,14 +108,27 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
 
-      ConnectionStrings__DefaultConnection: >-
-        Host=resource-db;
-        Database=${RESOURCE_DB_NAME};
-        Username=${DB_USER};
-        Password=${DB_PASSWORD}
+      ConnectionStrings__ResourceDatabase: >-
+        Host=resource-db;Port=5432;Database=${RESOURCE_DB_NAME};Username=${DB_USER}
+      RESOURCE_DB_PASSWORD: ${DB_PASSWORD}
+
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      FRONTEND_ORIGIN: ${ALLOWED_ORIGINS}
+
+      Kafka__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS}
 
     depends_on:
-      - resource-db
+      resource-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 
   # ============================================================
@@ -94,7 +136,7 @@ services:
   # ============================================================
 
   authorization-db:
-    image: postgres:latest
+    image: postgres:16-alpine
     container_name: authorization-db
 
     environment:
@@ -107,6 +149,12 @@ services:
 
     volumes:
       - authorization_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${AUTHORIZATION_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 
   authorization_svc:
@@ -123,16 +171,35 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
 
-      ConnectionStrings__DefaultConnection: >-
-        Host=authorization-db;
-        Database=${AUTHORIZATION_DB_NAME};
-        Username=${DB_USER};
-        Password=${DB_PASSWORD}
+      # AuthorizationService/Program.cs reads the full connection string
+      # directly (password included inline) — it does not split out a
+      # separate *_DB_PASSWORD var the way identity/resource do.
+      ConnectionStrings__AuthorizationDatabase: >-
+        Host=authorization-db;Port=5432;Database=${AUTHORIZATION_DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
+
+      # Without these, Program.cs falls back to its appsettings.json
+      # localhost defaults, which inside this container means itself.
+      IDENTITY_SERVICE_URL: http://identity_svc:8080
+      RESOURCE_SERVICE_URL: http://resource_svc:8080
+
+      Kafka__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS}
 
     depends_on:
-      - authorization-db
-      - identity_svc
-      - resource_svc
+      authorization-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      identity_svc:
+        condition: service_healthy
+      resource_svc:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 
   # ============================================================
@@ -163,9 +230,103 @@ services:
       AllowedOrigins__0: ${ALLOWED_ORIGINS}
 
     depends_on:
-      - identity_svc
-      - resource_svc
-      - authorization_svc
+      identity_svc:
+        condition: service_healthy
+      resource_svc:
+        condition: service_healthy
+      authorization_svc:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+
+  # ============================================================
+  # Apache Kafka (KRaft Mode - ZooKeeper-less)
+  # ============================================================
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    ports:
+      - "${KAFKA_PORT:-29092}:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:29092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      CLUSTER_ID: '4L622nShTUiDwyCGsqZSmw'
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+
+  # ============================================================
+  # Kafka Topic Initialization (SCRUM-27 AC-1)
+  #
+  # One-shot container: creates all 11 domain-event topics explicitly,
+  # idempotently, then exits. Runs once per `docker compose up`; safe to
+  # re-run since --if-not-exists makes every create a no-op after the
+  # first successful run.
+  # ============================================================
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        TOPICS="access-requested access-granted access-denied approval-requested approval-granted approval-rejected access-revoked user-created user-updated resource-created resource-updated"
+        for topic in $$TOPICS; do
+          echo "Ensuring topic exists: $$topic"
+          kafka-topics --create --if-not-exists \
+            --topic "$$topic" \
+            --bootstrap-server kafka:9092 \
+            --partitions 1 \
+            --replication-factor 1
+        done
+        echo "All 11 topics verified."
+        kafka-topics --list --bootstrap-server kafka:9092
+
+
+  # ============================================================
+  # Provectus Kafka UI (Cluster & Message Inspector)
+  # ============================================================
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "${KAFKA_UI_PORT:-8085}:8080"
+    environment:
+      DYNAMIC_CONFIG_ENABLED: 'true'
+      KAFKA_CLUSTERS_0_NAME: 'bismarck-local-cluster'
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: '${KAFKA_BOOTSTRAP_SERVERS}'
+    depends_on:
+      kafka:
+        condition: service_healthy
 
 
 # ============================================================
@@ -176,3 +337,4 @@ volumes:
   identity_data:
   resource_data:
   authorization_data:
+  kafka_data:
