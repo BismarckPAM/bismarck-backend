@@ -100,6 +100,6 @@ public sealed class IdentityServiceClient(
     private sealed record IdentityUserResponse(
         Guid Id,
         Guid RoleId,
-        [property: JsonPropertyName("roleName")] string RoleName,
+        [property: JsonPropertyName("role")] string RoleName,
         bool IsActive);
 }
