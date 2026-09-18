@@ -67,6 +67,25 @@ public class ResourceServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_WithValidRequest_PublishesResourceCreatedEvent()
+    {
+        using var dbContext = CreateDbContext(Guid.NewGuid().ToString());
+        var publisher = new RecordingDomainEventPublisher();
+        var service = new ResourceService(dbContext, _mapper, _createValidator, _updateValidator, publisher);
+
+        var result = await service.CreateAsync(new CreateResourceRequest
+        {
+            Type = "Database",
+            Owner = "DevOps",
+            Environment = "Production",
+            Criticality = ResourceCriticality.HIGH
+        });
+
+        var published = Assert.Single(publisher.Events);
+        Assert.Equal("resource-created", published.EventType);
+        Assert.Equal(result.Id, published.EntityId);
+    }
+    [Fact]
     public async Task CreateAsync_WithInvalidRequest_ThrowsValidationException()
     {
         // Arrange
@@ -234,6 +253,39 @@ public class ResourceServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WithValidRequest_PublishesResourceUpdatedEvent()
+    {
+        using var dbContext = CreateDbContext(Guid.NewGuid().ToString());
+        var publisher = new RecordingDomainEventPublisher();
+        var service = new ResourceService(dbContext, _mapper, _createValidator, _updateValidator, publisher);
+        var resource = new ResourceModel
+        {
+            Id = Guid.NewGuid(),
+            Type = "AppService",
+            Owner = "Old Owner",
+            Environment = "QA",
+            Criticality = ResourceCriticality.LOW,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        dbContext.Resources.Add(resource);
+        await dbContext.SaveChangesAsync();
+
+        var result = await service.UpdateAsync(resource.Id, new UpdateResourceRequest
+        {
+            Type = "AppServiceUpdated",
+            Owner = "New Owner",
+            Environment = "Prod",
+            Criticality = ResourceCriticality.CRITICAL,
+            IsActive = true
+        });
+
+        var published = Assert.Single(publisher.Events);
+        Assert.Equal("resource-updated", published.EventType);
+        Assert.Equal(result.Id, published.EntityId);
+    }
+
+    [Fact]
     public async Task UpdateAsync_WhenResourceDoesNotExist_ThrowsNotFoundException()
     {
         // Arrange
@@ -367,5 +419,16 @@ public class ResourceServiceTests
 
         // Act & Assert
         await Assert.ThrowsAsync<NotFoundException>(() => service.DeleteAsync(Guid.NewGuid()));
+    }
+
+    private sealed class RecordingDomainEventPublisher : IDomainEventPublisher
+    {
+        public List<DomainEventMessage> Events { get; } = new();
+
+        public Task PublishAsync(DomainEventMessage message, CancellationToken cancellationToken = default)
+        {
+            Events.Add(message);
+            return Task.CompletedTask;
+        }
     }
 }
