@@ -9,6 +9,7 @@ on:
     branches:
       - deploy/production
 
+
 jobs:
 
   # ============================================================
@@ -26,6 +27,7 @@ jobs:
         service:
           - identity
           - resource
+          - AuthorizationService
           - gateway
 
     steps:
@@ -49,11 +51,12 @@ jobs:
 
 
       # --------------------------------------------------------
-      # Restore Dependencies
+      # Restore Service Dependencies
       # --------------------------------------------------------
 
-      - name: Restore Dependencies
-        run: dotnet restore ./${{ matrix.service }}
+      - name: Restore Service Dependencies
+        run: |
+          dotnet restore ./${{ matrix.service }}
 
 
       # --------------------------------------------------------
@@ -77,7 +80,6 @@ jobs:
           dotnet test \
             ./identity/Identity.Service.Tests/Identity.Service.Tests.csproj \
             --configuration Release \
-            --no-restore \
             --verbosity normal
 
 
@@ -87,7 +89,6 @@ jobs:
           dotnet test \
             ./identity/Identity.Service.IntegrationTests/Identity.Service.IntegrationTests.csproj \
             --configuration Release \
-            --no-restore \
             --verbosity normal
 
 
@@ -101,7 +102,6 @@ jobs:
           dotnet test \
             ./resource/Resource.Service.Tests/Resource.Service.Tests.csproj \
             --configuration Release \
-            --no-restore \
             --verbosity normal
 
 
@@ -111,15 +111,26 @@ jobs:
           dotnet test \
             ./resource/Resource.Service.IntegrationTests/Resource.Service.IntegrationTests.csproj \
             --configuration Release \
-            --no-restore \
+            --verbosity normal
+
+
+      # ========================================================
+      # Authorization Tests
+      # ========================================================
+
+      - name: Run Authorization Unit Tests
+        if: matrix.service == 'AuthorizationService'
+        run: |
+          dotnet test \
+            ./AuthorizationService.Tests/AuthorizationService.Tests.csproj \
+            --configuration Release \
             --verbosity normal
 
 
       # ========================================================
       # Gateway
       #
-      # Gateway currently has no test project based on the
-      # structure you provided.
+      # Gateway currently has no test project.
       # ========================================================
 
       - name: Gateway Test Status
@@ -161,7 +172,7 @@ jobs:
       # --------------------------------------------------------
       # Create CI Environment
       #
-      # These values exist ONLY for Compose validation/build.
+      # These values exist ONLY for CI Compose validation/build.
       # They are not production credentials.
       # --------------------------------------------------------
 
@@ -173,9 +184,11 @@ jobs:
 
           IDENTITY_DB_NAME=identity_db
           RESOURCE_DB_NAME=resource_db
+          AUTHORIZATION_DB_NAME=authorization_db
 
           IDENTITY_DB_PORT=5433
           RESOURCE_DB_PORT=5434
+          AUTHORIZATION_DB_PORT=5435
 
           GATEWAY_PORT=8080
 
@@ -197,6 +210,7 @@ jobs:
       #
       # identity_svc
       # resource_svc
+      # authorization_svc
       # gateway_svc
       #
       # PostgreSQL images are pulled from Docker Hub.
@@ -208,7 +222,7 @@ jobs:
 
 
       # --------------------------------------------------------
-      # Cleanup
+      # Clean Up
       # --------------------------------------------------------
 
       - name: Clean Up
@@ -250,6 +264,9 @@ jobs:
 
           - service: resource
             image_name: resource_svc
+
+          - service: AuthorizationService
+            image_name: authorization_svc
 
           - service: gateway
             image_name: gateway_svc

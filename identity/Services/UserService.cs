@@ -8,9 +8,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Identity.Service.Services;
 
-public class UserService(IdentityDbContext dbContext, IMapper mapper, IPasswordHasher? passwordHasher = null) : IUserService
+public class UserService(
+    IdentityDbContext dbContext,
+    IMapper mapper,
+    IPasswordHasher? passwordHasher = null,
+    IDomainEventPublisher? publisher = null) : IUserService
 {
     private readonly IPasswordHasher passwordHasher = passwordHasher ?? new PasswordHasher();
+    private readonly IDomainEventPublisher domainEventPublisher = publisher ?? new NullDomainEventPublisher();
 
     public async Task<UserResponse> CreateAsync(CreateUserRequest request, CancellationToken cancellationToken = default)
     {
@@ -24,7 +29,22 @@ public class UserService(IdentityDbContext dbContext, IMapper mapper, IPasswordH
         dbContext.Users.Add(user);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return await ProjectUser(dbContext.Users.Where(item => item.Id == user.Id), cancellationToken);
+        var response = await ProjectUser(dbContext.Users.Where(item => item.Id == user.Id), cancellationToken);
+        await domainEventPublisher.PublishAsync(new DomainEventMessage(
+            "user-created",
+            response.Id,
+            DateTimeOffset.UtcNow,
+            new
+            {
+                response.FullName,
+                response.Email,
+                response.RoleId,
+                response.DepartmentId,
+                response.IsActive,
+                response.CreatedAt
+            }), cancellationToken);
+
+        return response;
     }
 
     public async Task<IReadOnlyList<UserResponse>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -55,7 +75,22 @@ public class UserService(IdentityDbContext dbContext, IMapper mapper, IPasswordH
         user.Email = request.Email.Trim().ToLowerInvariant();
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return await ProjectUser(dbContext.Users.IgnoreQueryFilters().Where(item => item.Id == id), cancellationToken);
+        var response = await ProjectUser(dbContext.Users.IgnoreQueryFilters().Where(item => item.Id == id), cancellationToken);
+        await domainEventPublisher.PublishAsync(new DomainEventMessage(
+            "user-updated",
+            response.Id,
+            DateTimeOffset.UtcNow,
+            new
+            {
+                response.FullName,
+                response.Email,
+                response.RoleId,
+                response.DepartmentId,
+                response.IsActive,
+                response.CreatedAt
+            }), cancellationToken);
+
+        return response;
     }
 
     public async Task<UserResponse> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
