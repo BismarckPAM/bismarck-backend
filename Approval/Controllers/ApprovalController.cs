@@ -27,6 +27,48 @@ public class ApprovalController(IApproverAuthorizationService approverAuthorizat
         return Ok(await approverAuthorizationService.GetPendingAsync());
     }
 
+    [HttpPost("{id}/approve")]
+    public async Task<ActionResult<ApprovalRequestResponse>> Approve(Guid id)
+    {
+        if (!approverAuthorizationService.IsApprover())
+            return Forbid();
+
+        try
+        {
+            return Ok(await approverAuthorizationService.ApproveAsync(id));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
+    [HttpPost("{id}/reject")]
+    public async Task<ActionResult<ApprovalRequestResponse>> Reject(
+        Guid id,
+        RejectApprovalRequest request)
+    {
+        if (!approverAuthorizationService.IsApprover())
+            return Forbid();
+
+        try
+        {
+            return Ok(await approverAuthorizationService.RejectAsync(id, request.Reason));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
     [HttpGet("{id}")]
     public async Task<ActionResult<ApprovalRequestResponse>> GetById(Guid id)
     {
