@@ -120,6 +120,79 @@ public sealed class ApprovalWorkflowIntegrationTests
         Assert.Equal(HttpStatusCode.Unauthorized, invalidTokenResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task Create_WithInvalidValues_ReturnsBadRequest()
+    {
+        using var client = CreateClient("requester-invalid", "Developer");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/approval/requests",
+            new CreateApprovalRequestRequest
+            {
+                RequestedLevel = 6,
+                DurationMinutes = 0
+            },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_WithoutAuthorizationHeader_ReturnsUnauthorized()
+    {
+        using var client = fixture.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/approval/requests",
+            new CreateApprovalRequestRequest
+            {
+                ResourceId = "resource-unauthorized",
+                RequestedLevel = 1,
+                Reason = "Test",
+                DurationMinutes = 15
+            },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task NonApproverCannotApproveRequest()
+    {
+        using var approver = CreateClient("approver-create", "Admin");
+        var createResponse = await approver.PostAsJsonAsync(
+            "/api/approval/requests",
+            new CreateApprovalRequestRequest
+            {
+                ResourceId = "resource-forbidden",
+                RequestedLevel = 2,
+                Reason = "Test",
+                DurationMinutes = 30
+            },
+            JsonOptions);
+        var created = await createResponse.Content.ReadFromJsonAsync<ApprovalRequestResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var developer = CreateClient("developer-action", "Developer");
+        var response = await developer.PostAsync(
+            $"/api/approval/requests/{created.Id}/approve",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Approve_UnknownRequest_ReturnsNotFound()
+    {
+        using var client = CreateClient("approver-missing", "Admin");
+
+        var response = await client.PostAsync(
+            $"/api/approval/requests/{Guid.NewGuid()}/approve",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     private HttpClient CreateClient(string userId, string role)
     {
         var client = fixture.CreateClient();

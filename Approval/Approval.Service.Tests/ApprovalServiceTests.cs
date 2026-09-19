@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Approval.Service.Data;
 using Approval.Service.DTOs;
@@ -12,6 +13,42 @@ namespace Approval.Service.Tests;
 
 public sealed class ApprovalServiceTests
 {
+    public static IEnumerable<object[]> ValidCreateRequests =>
+        Enumerable.Range(1, 101)
+            .Select(caseNumber => new object[]
+            {
+                $"resource-{caseNumber}",
+                (caseNumber % 5) + 1,
+                $"Business justification for test case {caseNumber}",
+                (caseNumber % 1440) + 1
+            });
+
+    [Theory]
+    [MemberData(nameof(ValidCreateRequests))]
+    public async Task CreateAsync_WithValidRequestData_CreatesPendingRequest(
+        string resourceId,
+        int requestedLevel,
+        string reason,
+        int durationMinutes)
+    {
+        await using var fixture = CreateFixture("requester-parameterized", "Developer");
+        var service = fixture.CreateService();
+
+        var result = await service.CreateAsync(new CreateApprovalRequestRequest
+        {
+            ResourceId = resourceId,
+            RequestedLevel = requestedLevel,
+            Reason = reason,
+            DurationMinutes = durationMinutes
+        });
+
+        Assert.Equal(ApprovalStatus.PENDING, result.Status);
+        Assert.Equal(resourceId, result.ResourceId);
+        Assert.Equal(requestedLevel, result.RequestedLevel);
+        Assert.Equal(reason, result.Reason);
+        Assert.Equal(durationMinutes, result.DurationMinutes);
+    }
+
     [Fact]
     public async Task CreateAsync_UsesAuthenticatedUserAndCreatesPendingRequest()
     {
@@ -34,6 +71,45 @@ public sealed class ApprovalServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_WithoutUserId_ThrowsUnauthorized()
+    {
+        await using var fixture = CreateFixture("requester-1", "Developer", authenticated: false);
+        var service = fixture.CreateService();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.CreateAsync(
+            new CreateApprovalRequestRequest
+            {
+                ResourceId = "resource-1",
+                RequestedLevel = 1,
+                Reason = "A valid reason",
+                DurationMinutes = 30
+            }));
+    }
+
+    [Fact]
+    public void CreateRequest_ValidationRejectsMissingAndOutOfRangeValues()
+    {
+        var request = new CreateApprovalRequestRequest
+        {
+            RequestedLevel = 6,
+            DurationMinutes = 0
+        };
+        var errors = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(
+            request,
+            new ValidationContext(request),
+            errors,
+            validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(request.ResourceId)));
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(request.Reason)));
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(request.RequestedLevel)));
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(request.DurationMinutes)));
+    }
+
+    [Fact]
     public async Task GetPendingAsync_ExcludesActionedRequests()
     {
         await using var fixture = CreateFixture("approver-1", "Admin");
@@ -46,6 +122,16 @@ public sealed class ApprovalServiceTests
 
         var request = Assert.Single(result);
         Assert.Equal("pending", request.Reason);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_WhenRequestDoesNotExist_ThrowsNotFound()
+    {
+        await using var fixture = CreateFixture("approver-1", "Admin");
+        var service = fixture.CreateService();
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => service.GetByIdAsync(Guid.NewGuid()));
     }
 
     [Fact]
@@ -90,6 +176,32 @@ public sealed class ApprovalServiceTests
     }
 
     [Fact]
+    public async Task RejectAsync_ThrowsConflictForAlreadyActionedRequest()
+    {
+        await using var fixture = CreateFixture("approver-1", "Admin");
+        var request = fixture.AddRequest(ApprovalStatus.REJECTED, "already rejected");
+        var service = fixture.CreateService();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.RejectAsync(request.Id, "Try again"));
+
+        Assert.Contains("already been actioned", exception.Message);
+    }
+
+    [Fact]
+    public async Task ApproveAsync_WhenRequestDoesNotExist_ThrowsNotFoundAndPublishesNothing()
+    {
+        await using var fixture = CreateFixture("approver-1", "Admin");
+        var publisher = new RecordingPublisher();
+        var service = fixture.CreateService(publisher);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => service.ApproveAsync(Guid.NewGuid()));
+
+        Assert.Empty(publisher.Events);
+    }
+
+    [Fact]
     public async Task ApproveAsync_ThrowsConflictForAlreadyActionedRequest()
     {
         await using var fixture = CreateFixture("approver-1", "Admin");
@@ -112,8 +224,11 @@ public sealed class ApprovalServiceTests
             () => service.RejectAsync(Guid.NewGuid(), "Not applicable"));
     }
 
-    private static TestFixture CreateFixture(string userId, string role)
-        => new(userId, role);
+    private static TestFixture CreateFixture(
+        string userId,
+        string role,
+        bool authenticated = true)
+        => new(userId, role, authenticated);
 
     private sealed class TestFixture : IAsyncDisposable
     {
@@ -122,7 +237,7 @@ public sealed class ApprovalServiceTests
         private readonly HttpContextAccessor httpContextAccessor;
         private readonly IConfiguration configuration;
 
-        public TestFixture(string userId, string role)
+        public TestFixture(string userId, string role, bool authenticated)
         {
             connection = new SqliteConnection("Data Source=:memory:");
             connection.Open();
@@ -131,16 +246,19 @@ public sealed class ApprovalServiceTests
                 .Options;
             context = new ApprovalDbContext(options);
             context.Database.EnsureCreated();
+            var claims = authenticated
+                ? new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, userId),
+                        new Claim(ClaimTypes.Role, role)
+                    ],
+                    "Test"))
+                : new ClaimsPrincipal(new ClaimsIdentity());
             httpContextAccessor = new HttpContextAccessor
             {
                 HttpContext = new DefaultHttpContext
                 {
-                    User = new ClaimsPrincipal(new ClaimsIdentity(
-                        [
-                            new Claim(ClaimTypes.NameIdentifier, userId),
-                            new Claim(ClaimTypes.Role, role)
-                        ],
-                        "Test"))
+                    User = claims
                 }
             };
             configuration = new ConfigurationBuilder()
