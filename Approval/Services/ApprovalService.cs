@@ -32,6 +32,41 @@ public sealed class ApprovalService(
 		return ToResponse(approvalRequest);
 	}
 
+	public async Task<ApprovalRequestResponse> ApproveAsync(Guid id)
+	{
+		var reviewerUserId = GetCurrentUserId();
+		var reviewedAt = DateTime.UtcNow;
+		var updatedRows = await dbContext.ApprovalRequests
+			.Where(item => item.Id == id && item.Status == ApprovalStatus.PENDING)
+			.ExecuteUpdateAsync(setters => setters
+				.SetProperty(item => item.Status, ApprovalStatus.APPROVED)
+				.SetProperty(item => item.ReviewedAt, reviewedAt)
+				.SetProperty(item => item.ReviewedByUserId, reviewerUserId));
+
+		if (updatedRows == 0)
+			throw await GetActionFailureAsync(id);
+
+		return await GetByIdAsync(id);
+	}
+
+	public async Task<ApprovalRequestResponse> RejectAsync(Guid id, string reason)
+	{
+		var reviewerUserId = GetCurrentUserId();
+		var reviewedAt = DateTime.UtcNow;
+		var updatedRows = await dbContext.ApprovalRequests
+			.Where(item => item.Id == id && item.Status == ApprovalStatus.PENDING)
+			.ExecuteUpdateAsync(setters => setters
+				.SetProperty(item => item.Status, ApprovalStatus.REJECTED)
+				.SetProperty(item => item.ReviewedAt, reviewedAt)
+				.SetProperty(item => item.ReviewedByUserId, reviewerUserId)
+				.SetProperty(item => item.RejectionReason, reason));
+
+		if (updatedRows == 0)
+			throw await GetActionFailureAsync(id);
+
+		return await GetByIdAsync(id);
+	}
+
 	public async Task<IEnumerable<ApprovalRequestResponse>> GetPendingAsync()
 	{
 		var requests = await dbContext.ApprovalRequests
@@ -95,14 +130,27 @@ public sealed class ApprovalService(
 	{
 		var approverRoles = configuration.GetSection("Approval:ApproverRoles")
 			.Get<string[]>() ?? [];
+		var user = httpContextAccessor.HttpContext?.User;
 
-		return approverRoles.Any(httpContextAccessor.HttpContext?.User.IsInRole);
+		return user is not null && approverRoles.Any(user.IsInRole);
 	}
 
 	private string GetCurrentUserId()
 	{
 		return httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier)
 			?? throw new UnauthorizedAccessException("The authenticated user ID is missing.");
+	}
+
+	private async Task<Exception> GetActionFailureAsync(Guid id)
+	{
+		var status = await dbContext.ApprovalRequests
+			.Where(item => item.Id == id)
+			.Select(item => (ApprovalStatus?)item.Status)
+			.SingleOrDefaultAsync();
+
+		return status is null
+			? new KeyNotFoundException($"Approval request {id} was not found.")
+			: new InvalidOperationException("The approval request has already been actioned.");
 	}
 
 	private static ApprovalRequestResponse ToResponse(ApprovalRequest request)
