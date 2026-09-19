@@ -1,4 +1,10 @@
+using Approval.Service.Data;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+builder.Services.AddOpenApi();
 
 var dbPassword = Environment.GetEnvironmentVariable("APPROVAL_DB_PASSWORD")
     ?? throw new InvalidOperationException("APPROVAL_DB_PASSWORD environment variable is required.");
@@ -19,8 +25,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-
+app.MapControllers();
 
 app.Run();
 
