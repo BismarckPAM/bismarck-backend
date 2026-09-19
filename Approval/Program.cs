@@ -11,6 +11,7 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IApproverAuthorizationService, ApprovalService>();
+builder.Services.AddSingleton<IDomainEventPublisher, KafkaDomainEventPublisher>();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var signingKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY")
