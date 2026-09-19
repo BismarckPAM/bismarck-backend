@@ -136,6 +136,53 @@ services:
 
 
   # ============================================================
+  # Approval Services
+  # ============================================================
+
+  approval-db:
+    image: postgres:latest
+    container_name: approval-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${APPROVAL_DB_NAME}
+
+    ports:
+      - "${APPROVAL_DB_PORT}:5432"
+
+    volumes:
+      - approval_data:/var/lib/postgresql/data
+
+
+  approval_svc:
+    build:
+      context: ./ApprovalService
+      dockerfile: Dockerfile
+
+    container_name: approval_svc
+
+    # No host port mapping.
+    # Internal URL:
+    # http://approval_svc:8080
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      ConnectionStrings__DefaultConnection: >-
+        Host=approval-db;
+        Database=${APPROVAL_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+
+    depends_on:
+      - authorization-db
+      - identity_svc
+      - resource_svc
+      - approval-db
+
+
+  # ============================================================
   # API Gateway
   # ============================================================
 
@@ -166,6 +213,7 @@ services:
       - identity_svc
       - resource_svc
       - authorization_svc
+      - approval_svc
 
 
 # ============================================================
