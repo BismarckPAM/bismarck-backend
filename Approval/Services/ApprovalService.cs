@@ -8,7 +8,8 @@ namespace Approval.Service.Services;
 
 public sealed class ApprovalService(
 	ApprovalDbContext dbContext,
-	IHttpContextAccessor httpContextAccessor) : IApproverAuthorizationService
+	IHttpContextAccessor httpContextAccessor,
+	IConfiguration configuration) : IApproverAuthorizationService
 {
 	public async Task<ApprovalRequestResponse> CreateAsync(
 		CreateApprovalRequestRequest request)
@@ -29,6 +30,17 @@ public sealed class ApprovalService(
 		await dbContext.SaveChangesAsync();
 
 		return ToResponse(approvalRequest);
+	}
+
+	public async Task<IEnumerable<ApprovalRequestResponse>> GetPendingAsync()
+	{
+		var requests = await dbContext.ApprovalRequests
+			.AsNoTracking()
+			.Where(item => item.Status == ApprovalStatus.PENDING)
+			.OrderBy(item => item.CreatedAt)
+			.ToListAsync();
+
+		return requests.Select(ToResponse);
 	}
 
 	public async Task<IEnumerable<ApprovalRequestResponse>> GetAllAsync()
@@ -77,6 +89,14 @@ public sealed class ApprovalService(
 		await dbContext.SaveChangesAsync();
 
 		return ToResponse(approvalRequest);
+	}
+
+	public bool IsApprover()
+	{
+		var approverRoles = configuration.GetSection("Approval:ApproverRoles")
+			.Get<string[]>() ?? [];
+
+		return approverRoles.Any(httpContextAccessor.HttpContext?.User.IsInRole);
 	}
 
 	private string GetCurrentUserId()
