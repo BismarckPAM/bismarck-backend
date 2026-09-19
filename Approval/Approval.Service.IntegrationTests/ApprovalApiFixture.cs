@@ -17,7 +17,7 @@ public sealed class ApprovalApiFixture : WebApplicationFactory<Program>, IAsyncL
     public const string TestIssuer = "Identity.Service";
     public const string TestAudience = "Bismarck.Services";
 
-    private readonly PostgreSqlContainer database = new PostgreSqlBuilder()
+    private readonly PostgreSqlContainer database = new PostgreSqlBuilder("postgres:16-alpine")
         .WithDatabase("approvaldb")
         .WithUsername("admin")
         .WithPassword("admin_password")
