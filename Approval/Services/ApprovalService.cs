@@ -9,7 +9,8 @@ namespace Approval.Service.Services;
 public sealed class ApprovalService(
 	ApprovalDbContext dbContext,
 	IHttpContextAccessor httpContextAccessor,
-	IConfiguration configuration) : IApproverAuthorizationService
+	IConfiguration configuration,
+	IDomainEventPublisher domainEventPublisher) : IApproverAuthorizationService
 {
 	public async Task<ApprovalRequestResponse> CreateAsync(
 		CreateApprovalRequestRequest request)
@@ -46,7 +47,22 @@ public sealed class ApprovalService(
 		if (updatedRows == 0)
 			throw await GetActionFailureAsync(id);
 
-		return await GetByIdAsync(id);
+		var approvedRequest = await GetByIdAsync(id);
+		await domainEventPublisher.PublishAsync(new DomainEventMessage(
+			"ApprovalGranted",
+			approvedRequest.Id,
+			DateTimeOffset.UtcNow,
+			new
+			{
+				approvedRequest.RequesterUserId,
+				approvedRequest.ResourceId,
+				approvedRequest.RequestedLevel,
+				approvedRequest.DurationMinutes,
+				approvedRequest.ReviewedByUserId,
+				approvedRequest.ReviewedAt
+			}));
+
+		return approvedRequest;
 	}
 
 	public async Task<ApprovalRequestResponse> RejectAsync(Guid id, string reason)
