@@ -1,8 +1,14 @@
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+var dbPassword = Environment.GetEnvironmentVariable("APPROVAL_DB_PASSWORD")
+    ?? throw new InvalidOperationException("APPROVAL_DB_PASSWORD environment variable is required.");
+
+var approvalConnectionString = builder.Configuration.GetConnectionString("ApprovalDatabase")
+    + $";Password={dbPassword}";
+
+builder.Services.AddDbContext<ApprovalDbContext>(options =>
+    options.UseNpgsql(approvalConnectionString));
+    
 
 var app = builder.Build();
 
@@ -18,7 +24,4 @@ app.UseHttpsRedirection();
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+
