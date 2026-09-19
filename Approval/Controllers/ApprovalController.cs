@@ -18,6 +18,15 @@ public class ApprovalController(IApproverAuthorizationService approverAuthorizat
         return CreatedAtAction(nameof(GetById), new { id = approvalRequest.Id }, approvalRequest);
     }
 
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<ApprovalRequestResponse>>> GetPending()
+    {
+        if (!approverAuthorizationService.IsApprover())
+            return Forbid();
+
+        return Ok(await approverAuthorizationService.GetPendingAsync());
+    }
+
     [HttpGet("{id}")]
     public async Task<ActionResult<ApprovalRequestResponse>> GetById(Guid id)
     {
