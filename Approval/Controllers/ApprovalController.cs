@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Approval.Service.DTOs;
-using Approval.Service.Exceptions;
 using Approval.Service.Services;
 
 namespace Approval.Service.Controllers;
@@ -27,7 +26,3 @@ public class ApprovalController(IApproverAuthorizationService approverAuthorizat
         return Ok(approvalRequest);
     }
 }
-
-[Route("api/approval/requests/{id}/approve")]
-
-[Route("api/approval/requests/{id}/reject")]
