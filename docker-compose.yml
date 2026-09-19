@@ -157,7 +157,7 @@ services:
 
   approval_svc:
     build:
-      context: ./ApprovalService
+      context: ./Approval
       dockerfile: Dockerfile
 
     container_name: approval_svc
@@ -205,6 +205,7 @@ services:
       Services__Identity__Url: http://identity_svc:8080
       Services__Resource__Url: http://resource_svc:8080
       Services__Authorization__Url: http://authorization_svc:8080
+      Services__Approval__Url: http://approval_svc:8080
 
       # Frontend origin(s) accepted by the gateway CORS policy.
       AllowedOrigins__0: ${ALLOWED_ORIGINS}
@@ -224,3 +225,4 @@ volumes:
   identity_data:
   resource_data:
   authorization_data:
+  approval_data:
