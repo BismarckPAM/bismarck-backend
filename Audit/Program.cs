@@ -18,6 +18,8 @@ builder.Services.AddDbContext<AuditDbContext>(options =>
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+builder.Services.AddScoped<IAuditService, AuditService>();
+
 var app = builder.Build();
 
 // 2. (Optional) Automatically apply migrations on startup in Development
