@@ -9,4 +9,16 @@ public static class KafkaTopics
     public const string ApprovalGranted = "approval-granted";
     public const string ApprovalRejected = "approval-rejected";
     public const string PermissionRevoked = "permission-revoked";
+
+    // All 7 topics in one collection
+    public static readonly string[] All = 
+    [
+        AccessRequested,
+        AccessGranted,
+        AccessDenied,
+        ApprovalRequested,
+        ApprovalGranted,
+        ApprovalRejected,
+        PermissionRevoked
+    ];
 }
