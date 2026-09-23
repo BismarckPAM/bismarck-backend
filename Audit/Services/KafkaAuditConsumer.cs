@@ -31,7 +31,7 @@ public class KafkaAuditConsumer : BackgroundService
         var config = new ConsumerConfig
         {
             BootstrapServers = _configuration["Kafka:BootstrapServers"] ?? "localhost:9092",
-            GroupId = "bismarck-audit-service",
+            GroupId = _configuration["Kafka:GroupId"] ?? "bismarck-audit-service",
             EnableAutoCommit = false,
             AutoOffsetReset = AutoOffsetReset.Earliest
         };
@@ -50,20 +50,21 @@ public class KafkaAuditConsumer : BackgroundService
         };
 
         consumer.Subscribe(topics);
-        _logger.LogInformation("KafkaAuditConsumer started. Subscribed to topics: {Topics}", string.Join(", ", topics));
+        _logger.LogInformation("KafkaAuditConsumer started with GroupId '{GroupId}'. Subscribed to topics: {Topics}", 
+            config.GroupId, string.Join(", ", topics));
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                // 1. Consume event
+                // Consume event
                 var consumeResult = consumer.Consume(stoppingToken);
                 if (consumeResult?.Message?.Value is null)
                 {
                     continue;
                 }
 
-                // 2. Deserialize event
+                // Deserialize event
                 SecurityEvent<JsonElement>? secEvent = null;
                 try
                 {
@@ -96,7 +97,7 @@ public class KafkaAuditConsumer : BackgroundService
                     continue;
                 }
 
-                // 3. Insert AuditLog
+                // Insert AuditLog
                 var auditLog = new AuditLog
                 {
                     Id = Guid.NewGuid(),
@@ -115,7 +116,7 @@ public class KafkaAuditConsumer : BackgroundService
 
                 dbContext.AuditLogs.Add(auditLog);
 
-                // 4. SaveChangesAsync
+                // SaveChangesAsync
                 try
                 {
                     await dbContext.SaveChangesAsync(stoppingToken);
@@ -138,7 +139,7 @@ public class KafkaAuditConsumer : BackgroundService
                     }
                 }
 
-                // 5. Commit Kafka offset 
+                // Commit Kafka offset 
                 consumer.Commit(consumeResult);
 
                 _logger.LogInformation("Successfully processed and committed audit event {EventId} from topic {Topic}", 
