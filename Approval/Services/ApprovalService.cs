@@ -33,37 +33,48 @@ public sealed class ApprovalService(
 		return ToResponse(approvalRequest);
 	}
 
-	public async Task<ApprovalRequestResponse> ApproveAsync(Guid id)
-	{
-		var reviewerUserId = GetCurrentUserId();
-		var reviewedAt = DateTime.UtcNow;
-		var updatedRows = await dbContext.ApprovalRequests
-			.Where(item => item.Id == id && item.Status == ApprovalStatus.PENDING)
-			.ExecuteUpdateAsync(setters => setters
-				.SetProperty(item => item.Status, ApprovalStatus.APPROVED)
-				.SetProperty(item => item.ReviewedAt, reviewedAt)
-				.SetProperty(item => item.ReviewedByUserId, reviewerUserId));
-
-		if (updatedRows == 0)
-			throw await GetActionFailureAsync(id);
-
-		var approvedRequest = await GetByIdAsync(id);
-		await domainEventPublisher.PublishAsync(new DomainEventMessage(
-			"ApprovalGranted",
-			approvedRequest.Id,
-			DateTimeOffset.UtcNow,
-			new
-			{
-				approvedRequest.RequesterUserId,
-				approvedRequest.ResourceId,
-				approvedRequest.RequestedLevel,
-				approvedRequest.DurationMinutes,
-				approvedRequest.ReviewedByUserId,
-				approvedRequest.ReviewedAt
-			}));
-
-		return approvedRequest;
-	}
+    public async Task<ApprovalRequestResponse> ApproveAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var reviewerUserId = GetCurrentUserId();
+        var reviewedAt = DateTime.UtcNow;
+    
+        // Pass cancellationToken to EF Core
+        var updatedRows = await dbContext.ApprovalRequests
+            .Where(item => item.Id == id && item.Status == ApprovalStatus.PENDING)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Status, ApprovalStatus.APPROVED)
+                .SetProperty(item => item.ReviewedAt, reviewedAt)
+                .SetProperty(item => item.ReviewedByUserId, reviewerUserId),
+                cancellationToken);
+    
+        if (updatedRows == 0)
+            throw await GetActionFailureAsync(id);
+    
+        var approvedRequest = await GetByIdAsync(id);
+    
+        var payload = new ApprovalGrantedPayload(
+            ApprovalId: approvedRequest.Id,
+            RequesterUserId: approvedRequest.RequesterUserId,
+            ResourceId: approvedRequest.ResourceId,
+            RequestedLevel: approvedRequest.RequestedLevel,
+            DurationMinutes: approvedRequest.DurationMinutes,
+            ReviewedByUserId: approvedRequest.ReviewedByUserId,
+            ReviewedAt: approvedRequest.ReviewedAt
+        );
+    
+        // Pass cancellationToken to Kafka publisher
+        await domainEventPublisher.PublishAsync(
+            new DomainEventMessage<ApprovalGrantedPayload>(
+                "ApprovalGranted",
+                approvedRequest.Id,
+                DateTimeOffset.UtcNow,
+                payload
+            ),
+            cancellationToken
+        );
+    
+        return approvedRequest;
+    }
 
 	public async Task<ApprovalRequestResponse> RejectAsync(Guid id, string reason)
 	{

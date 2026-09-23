@@ -297,14 +297,16 @@ public sealed class ApprovalServiceTests
 
     private sealed class RecordingPublisher : IDomainEventPublisher
     {
-        public List<DomainEventMessage> Events { get; } = [];
+        public List<RecordedEvent> Events { get; } = [];
 
-        public Task PublishAsync(
-            DomainEventMessage message,
+        public Task PublishAsync<T>(
+            DomainEventMessage<T> message,
             CancellationToken cancellationToken = default)
         {
-            Events.Add(message);
+            Events.Add(new RecordedEvent(message.EventType, message.EntityId));
             return Task.CompletedTask;
         }
+
+        public sealed record RecordedEvent(string EventType, Guid EntityId);
     }
 }

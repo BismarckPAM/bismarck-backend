@@ -1,7 +1,7 @@
 namespace Approval.Service.Services;
 
-public sealed record DomainEventMessage(
+public sealed record DomainEventMessage<T>(
     string EventType,
     Guid EntityId,
     DateTimeOffset Timestamp,
-    object Payload);
+    T Payload);
