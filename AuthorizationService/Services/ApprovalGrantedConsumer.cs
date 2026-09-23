@@ -133,4 +133,41 @@ public class ApprovalGrantedConsumer : BackgroundService
                 catch (DbUpdateException ex)
                 {
                     // If Postgres unique constraint (code 23505) fires due to concurrent duplicate
-                    if (ex.InnerException is PostgresException { SqlState:
+                    if (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+                    {
+                        _logger.LogWarning(
+                            "ApprovalId {ApprovalId} was inserted concurrently. Committing duplicate offset.",
+                            approvalId);
+                    }
+                    else
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Failed to persist ApprovalGranted event {EventId}. Leaving offset uncommitted.",
+                            secEvent.EventId);
+                        throw;
+                    }
+                }
+
+                consumer.Commit(consumeResult);
+                _logger.LogInformation(
+                    "Processed ApprovalGranted event {EventId} and committed offset.",
+                    secEvent.EventId);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("ApprovalGrantedConsumer cancellation requested.");
+                break;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "Error processing ApprovalGranted event. Offset remains uncommitted.");
+                await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+            }
+        }
+
+        consumer.Close();
+    }
+}
