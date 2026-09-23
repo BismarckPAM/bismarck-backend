@@ -28,24 +28,31 @@ public class ApprovalController(IApproverAuthorizationService approverAuthorizat
     }
 
     [HttpPost("{id}/approve")]
-    public async Task<ActionResult<ApprovalRequestResponse>> Approve(Guid id)
-    {
-        if (!approverAuthorizationService.IsApprover())
-            return Forbid();
-
-        try
+        public async Task<ActionResult<ApprovalRequestResponse>> Approve(
+            Guid id, 
+            CancellationToken cancellationToken)
         {
-            return Ok(await approverAuthorizationService.ApproveAsync(id));
+            if (!approverAuthorizationService.IsApprover())
+                return Forbid();
+    
+            try
+            {
+                return Ok(await approverAuthorizationService.ApproveAsync(id, cancellationToken));
+            }
+            catch (OperationCanceledException)
+            {
+                // 499 Client Closed Request or standard abort response when the client disconnects
+                return StatusCode(499);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Conflict(new { message = exception.Message });
+            }
         }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-        catch (InvalidOperationException exception)
-        {
-            return Conflict(new { message = exception.Message });
-        }
-    }
 
     [HttpPost("{id}/reject")]
     public async Task<ActionResult<ApprovalRequestResponse>> Reject(
