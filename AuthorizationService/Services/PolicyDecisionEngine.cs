@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AuthorizationService.Services;
 
-public sealed class PolicyDecisionEngine(AuthorizationDbContext dbContext)
+public sealed class PolicyDecisionEngine(
+    AuthorizationDbContext dbContext,
+    ISystemClock clock)
     : IPolicyDecisionEngine
 {
     private static readonly IReadOnlyDictionary<string, int> ActionLevelMap =
@@ -41,6 +43,35 @@ public sealed class PolicyDecisionEngine(AuthorizationDbContext dbContext)
         if (string.IsNullOrWhiteSpace(action)
             || !ActionLevelMap.TryGetValue(action, out var requiredLevel))
             return AuthorizationDecisionResult.Deny(AuthorizationDenialReason.UNKNOWN_ACTION);
+
+        TemporaryPermission? temporaryPermission;
+        try
+        {
+            var now = clock.UtcNow;
+            temporaryPermission = await dbContext.TemporaryPermissions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(permission =>
+                    permission.UserId == user.Id
+                    && permission.ResourceId == resource.Id
+                    && permission.Status == TemporaryPermissionStatus.ACTIVE
+                    && permission.ExpiresAt > now
+                    && permission.RequestedLevel >= requiredLevel,
+                    cancellationToken);
+        }
+        catch (DbException)
+        {
+            return AuthorizationDecisionResult.Deny(AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
+        }
+
+        if (temporaryPermission is not null)
+        {
+            return new AuthorizationDecisionResult(
+                AuthorizationDecision.ALLOW,
+                "TEMPORARY_PERMISSION_AUTHORIZED",
+                temporaryPermission.ExpiresAt,
+                ApprovalRequirement.NONE,
+                "Access granted by an active temporary permission.");
+        }
 
         AccessPolicy? policy;
         try

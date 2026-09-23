@@ -30,7 +30,7 @@ public sealed class PolicyDecisionEngineTests
         });
         var result = await CreateEngine(context).EvaluateAsync(
             new UserDto(Guid.NewGuid(), "Developer", true),
-            new ResourceDto("VM", "Development", "LOW"),
+            new ResourceDto(Guid.NewGuid(), "VM", "Development", "LOW"),
             "SSH_ACCESS");
 
         Assert.Equal(AuthorizationDecision.ALLOW, result.Decision);
@@ -51,7 +51,7 @@ public sealed class PolicyDecisionEngineTests
         });
         var result = await CreateEngine(context).EvaluateAsync(
             new UserDto(Guid.NewGuid(), "DevOps", true),
-            new ResourceDto("Server", "Production", "CRITICAL"),
+            new ResourceDto(Guid.NewGuid(), "Server", "Production", "CRITICAL"),
             "ROOT");
 
         Assert.Equal(AuthorizationDecision.APPROVAL_REQUIRED, result.Decision);
@@ -74,7 +74,7 @@ public sealed class PolicyDecisionEngineTests
         });
         var result = await CreateEngine(context).EvaluateAsync(
             new UserDto(Guid.NewGuid(), "Developer", true),
-            new ResourceDto("VM", "PROD", "LOW"),
+            new ResourceDto(Guid.NewGuid(), "VM", "PROD", "LOW"),
             "DEPLOY_BUILD");
 
         Assert.Equal(AuthorizationDecision.APPROVAL_REQUIRED, result.Decision);
@@ -87,7 +87,7 @@ public sealed class PolicyDecisionEngineTests
         await using var context = CreateContext();
         var result = await CreateEngine(context).EvaluateAsync(
             new UserDto(Guid.NewGuid(), "Developer", false),
-            new ResourceDto("VM", "Development", "LOW"),
+            new ResourceDto(Guid.NewGuid(), "VM", "Development", "LOW"),
             "SSH_ACCESS");
 
         AssertDenial(result, AuthorizationDenialReason.USER_DEACTIVATED);
@@ -99,7 +99,7 @@ public sealed class PolicyDecisionEngineTests
         await using var context = CreateContext();
         var result = await CreateEngine(context).EvaluateAsync(
             new UserDto(Guid.NewGuid(), "", true),
-            new ResourceDto("VM", "Development", "LOW"),
+            new ResourceDto(Guid.NewGuid(), "VM", "Development", "LOW"),
             "SSH_ACCESS");
 
         AssertDenial(result, AuthorizationDenialReason.USER_ROLE_NOT_ASSIGNED);
@@ -111,7 +111,7 @@ public sealed class PolicyDecisionEngineTests
         await using var context = CreateContext();
         var result = await CreateEngine(context).EvaluateAsync(
             new UserDto(Guid.NewGuid(), "Developer", true),
-            new ResourceDto("VM", "Development", "LOW"),
+            new ResourceDto(Guid.NewGuid(), "VM", "Development", "LOW"),
             "FORMAT_DISK");
 
         AssertDenial(result, AuthorizationDenialReason.UNKNOWN_ACTION);
@@ -129,7 +129,7 @@ public sealed class PolicyDecisionEngineTests
         });
         var result = await CreateEngine(context).EvaluateAsync(
             new UserDto(Guid.NewGuid(), "Developer", true),
-            new ResourceDto("VM", "Development", "LOW"),
+            new ResourceDto(Guid.NewGuid(), "VM", "Development", "LOW"),
             "SSH_ACCESS");
 
         AssertDenial(result, AuthorizationDenialReason.INSUFFICIENT_ROLE_PERMISSIONS);
@@ -141,24 +141,89 @@ public sealed class PolicyDecisionEngineTests
         await using var context = CreateContext();
         var result = await CreateEngine(context).EvaluateAsync(
             new UserDto(Guid.NewGuid(), "Developer", true),
-            new ResourceDto("VM", "Development", "LOW"),
+            new ResourceDto(Guid.NewGuid(), "VM", "Development", "LOW"),
             "READ_STATUS");
 
         AssertDenial(result, AuthorizationDenialReason.INSUFFICIENT_ROLE_PERMISSIONS);
     }
 
-    private static PolicyDecisionEngine CreateEngine(AuthorizationDbContext context) =>
-        new(context);
+    [Fact]
+    public async Task EvaluateAsync_ActiveTemporaryPermission_AllowsWithPermissionExpiry()
+    {
+        var now = new DateTimeOffset(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
+        var userId = Guid.NewGuid();
+        var resourceId = Guid.NewGuid();
+        var expiresAt = now.AddMinutes(45);
+        await using var context = CreateContext(new TemporaryPermission
+        {
+            ApprovalId = Guid.NewGuid(),
+            UserId = userId,
+            ResourceId = resourceId,
+            RequestedLevel = 4,
+            GrantedAt = now.AddMinutes(-5),
+            ExpiresAt = expiresAt,
+            Status = TemporaryPermissionStatus.ACTIVE
+        });
 
-    private static AuthorizationDbContext CreateContext(params AccessPolicy[] policies)
+        var result = await new PolicyDecisionEngine(context, new TestClock(now)).EvaluateAsync(
+            new UserDto(userId, "Developer", true),
+            new ResourceDto(resourceId, "VM", "Production", "CRITICAL"),
+            "CONFIG_WRITE");
+
+        Assert.Equal(AuthorizationDecision.ALLOW, result.Decision);
+        Assert.Equal("TEMPORARY_PERMISSION_AUTHORIZED", result.Reason);
+        Assert.Equal(expiresAt, result.ExpiresAt);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_ExpiredTemporaryPermission_DoesNotAllow()
+    {
+        var now = new DateTimeOffset(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
+        var userId = Guid.NewGuid();
+        var resourceId = Guid.NewGuid();
+        await using var context = CreateContext(new TemporaryPermission
+        {
+            ApprovalId = Guid.NewGuid(),
+            UserId = userId,
+            ResourceId = resourceId,
+            RequestedLevel = 5,
+            GrantedAt = now.AddMinutes(-60),
+            ExpiresAt = now.AddMinutes(-1),
+            Status = TemporaryPermissionStatus.ACTIVE
+        });
+
+        var result = await new PolicyDecisionEngine(context, new TestClock(now)).EvaluateAsync(
+            new UserDto(userId, "Developer", true),
+            new ResourceDto(resourceId, "VM", "Production", "CRITICAL"),
+            "CONFIG_WRITE");
+
+        Assert.Equal(AuthorizationDecision.APPROVAL_REQUIRED, result.Decision);
+    }
+
+    private static PolicyDecisionEngine CreateEngine(AuthorizationDbContext context) =>
+        new(context, new SystemClock());
+
+    private static AuthorizationDbContext CreateContext(
+        params object[] entities)
     {
         var options = new DbContextOptionsBuilder<AuthorizationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var context = new AuthorizationDbContext(options);
-        context.AccessPolicies.AddRange(policies);
+        foreach (var entity in entities)
+        {
+            if (entity is AccessPolicy policy)
+                context.AccessPolicies.Add(policy);
+            else if (entity is TemporaryPermission permission)
+                context.TemporaryPermissions.Add(permission);
+        }
         context.SaveChanges();
         return context;
+    }
+
+    private sealed class TestClock(DateTimeOffset now) : ISystemClock
+    {
+        public DateTimeOffset UtcNow => now;
     }
 
     private static void AssertDenial(
@@ -188,7 +253,7 @@ public sealed class AuthorizationControllerTests
                 new IdentityUser(userId, Guid.NewGuid(), "Developer", true)));
         resource.Setup(client => client.GetResourceContextAsync(resourceId, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ServiceLookupResult<ResourceContext>(
-                new ResourceContext("VM", "Development", "LOW")));
+                new ResourceContext(resourceId, "VM", "Development", "LOW")));
         engine.Setup(client => client.EvaluateAsync(
                 It.IsAny<UserDto>(), It.IsAny<ResourceDto>(), "SSH_ACCESS", It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthorizationDecisionResult.Allow(TimeSpan.FromMinutes(1)));
@@ -229,7 +294,7 @@ public sealed class AuthorizationControllerTests
         resource.Setup(client => client.GetResourceContextAsync(
                 It.IsAny<Guid>(), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ServiceLookupResult<ResourceContext>(
-                new ResourceContext("VM", "Development", "LOW")));
+                new ResourceContext(Guid.NewGuid(), "VM", "Development", "LOW")));
 
         var result = await CreateController(identity, resource, engine).Check(
             new AuthorizationCheckRequest(Guid.NewGuid(), Guid.NewGuid(), "SSH_ACCESS"),
@@ -304,7 +369,7 @@ public sealed class AuthorizationControllerTests
         resource.Setup(client => client.GetResourceContextAsync(
                 It.IsAny<Guid>(), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ServiceLookupResult<ResourceContext>(
-                new ResourceContext("VM", "Development", "LOW")));
+                new ResourceContext(Guid.NewGuid(), "VM", "Development", "LOW")));
 
         var result = await CreateController(identity, resource, engine).Check(
             new AuthorizationCheckRequest(Guid.NewGuid(), Guid.NewGuid(), "SSH_ACCESS"),
@@ -329,7 +394,7 @@ public sealed class AuthorizationControllerTests
         resource.Setup(client => client.GetResourceContextAsync(
                 It.IsAny<Guid>(), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ServiceLookupResult<ResourceContext>(
-                new ResourceContext("VM", "Development", "LOW")));
+                new ResourceContext(Guid.NewGuid(), "VM", "Development", "LOW")));
 
         var result = await CreateController(identity, resource, engine).Check(
             new AuthorizationCheckRequest(Guid.NewGuid(), Guid.NewGuid(), "SSH_ACCESS"),

@@ -62,6 +62,7 @@ public sealed class ResourceServiceClient(
                 return new(null, AuthorizationDenialReason.SYSTEM_ERROR_FAIL_CLOSED);
 
             return new(new ResourceContext(
+                resource.Id,
                 resource.Type,
                 resource.Environment,
                 resource.Criticality));
@@ -103,6 +104,7 @@ public sealed class ResourceServiceClient(
     }
 
     private sealed record ResourceResponse(
+        [property: JsonPropertyName("id")] Guid Id,
         [property: JsonPropertyName("type")] string Type,
         [property: JsonPropertyName("environment")] string Environment,
         [property: JsonPropertyName("criticality")] string Criticality,
