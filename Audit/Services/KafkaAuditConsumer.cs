@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Confluent.Kafka;
 using Microsoft.EntityFrameworkCore;
+using Npgsql; 
 using Audit.Service.Data;
 using Audit.Service.Models;
 using Messaging;
@@ -25,7 +26,6 @@ public class KafkaAuditConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        
         await Task.Yield();
 
         var config = new ConsumerConfig
@@ -38,7 +38,6 @@ public class KafkaAuditConsumer : BackgroundService
 
         using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
 
-    
         var topics = new[]
         {
             KafkaTopics.AccessRequested,
@@ -57,26 +56,32 @@ public class KafkaAuditConsumer : BackgroundService
         {
             try
             {
-                // 1. Consume event (blocking call with stoppingToken)
+                // 1. Consume event
                 var consumeResult = consumer.Consume(stoppingToken);
                 if (consumeResult?.Message?.Value is null)
                 {
                     continue;
                 }
 
-                // 2. Deserialize event using generic SecurityEvent with JsonElement for dynamic metadata
-                var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var secEvent = JsonSerializer.Deserialize<SecurityEvent<JsonElement>>(consumeResult.Message.Value, jsonOptions);
-
-                if (secEvent is null)
+                // 2. Deserialize event
+                SecurityEvent<JsonElement>? secEvent = null;
+                try
                 {
-                    _logger.LogWarning("Failed to deserialize event at topic {Topic}, partition {Partition}, offset {Offset}",
-                        consumeResult.Topic, consumeResult.Partition, consumeResult.Offset);
-                    consumer.Commit(consumeResult);
-                    continue;
+                    var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    secEvent = JsonSerializer.Deserialize<SecurityEvent<JsonElement>>(consumeResult.Message.Value, jsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    // Do NOT commit on malformed JSON. Throw to trigger retry / alert.
+                    throw new FormatException($"Malformed JSON message at topic {consumeResult.Topic}, offset {consumeResult.Offset}", ex);
                 }
 
-                // Create a dedicated DI scope for the scoped DbContext
+                if (secEvent is null || secEvent.EventId == Guid.Empty)
+                {
+                    // Do NOT commit invalid payload.
+                    throw new FormatException($"Deserialized event is null or has empty EventId at topic {consumeResult.Topic}, offset {consumeResult.Offset}");
+                }
+
                 using var scope = _scopeFactory.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
 
@@ -87,8 +92,6 @@ public class KafkaAuditConsumer : BackgroundService
                 if (alreadyExists)
                 {
                     _logger.LogWarning("Duplicate event detected (EventId: {EventId}). Skipping insert and committing offset.", secEvent.EventId);
-                    
-                    // EventId already exists -> do not insert again -> commit the offset
                     consumer.Commit(consumeResult);
                     continue;
                 }
@@ -119,11 +122,23 @@ public class KafkaAuditConsumer : BackgroundService
                 }
                 catch (DbUpdateException ex)
                 {
-                    // Concurrency safeguard: handles potential race conditions on unique index
-                    _logger.LogWarning(ex, "Unique constraint hit for EventId: {EventId}. Skipping duplicate.", secEvent.EventId);
+                    // Only ignore if it is a CONFIRMED duplicate EventId 
+                    bool isConfirmedDuplicate = ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }
+                        || await dbContext.AuditLogs.AsNoTracking().AnyAsync(a => a.EventId == secEvent.EventId, stoppingToken);
+
+                    if (isConfirmedDuplicate)
+                    {
+                        _logger.LogWarning("Confirmed duplicate EventId {EventId} during insert. Proceeding to commit.", secEvent.EventId);
+                    }
+                    else
+                    {
+                        // Any other database outage/error MUST throw and retry
+                        _logger.LogError(ex, "Database update failed with a non-duplicate error for EventId {EventId}. Retrying without committing.", secEvent.EventId);
+                        throw; 
+                    }
                 }
 
-                // 5. Commit Kafka offset (strictly AFTER database save completes)
+                // 5. Commit Kafka offset 
                 consumer.Commit(consumeResult);
 
                 _logger.LogInformation("Successfully processed and committed audit event {EventId} from topic {Topic}", 
@@ -131,13 +146,14 @@ public class KafkaAuditConsumer : BackgroundService
             }
             catch (OperationCanceledException)
             {
-                _logger.LogInformation("KafkaAuditConsumer cancellation requested. Stopping consumer loop.");
+                _logger.LogInformation("KafkaAuditConsumer cancellation requested. Stopping loop.");
                 break;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error occurred while processing message. Offset will NOT be committed.");
-                // Delay briefly before retry to prevent busy-looping if database or network is down
+                // Unhandled DB outage or deserialization failure reaches here:
+                // Offset is NEVER committed -> message will be retried
+                _logger.LogError(ex, "Error processing event. Offset will NOT be committed. Retrying in 2 seconds...");
                 await Task.Delay(2000, stoppingToken);
             }
         }
