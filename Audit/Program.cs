@@ -1,5 +1,6 @@
 using Audit.Service.Data;
 using Microsoft.EntityFrameworkCore;
+using Audit.Service.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
