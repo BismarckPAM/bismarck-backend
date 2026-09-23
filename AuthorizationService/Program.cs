@@ -76,6 +76,7 @@ builder.Services
     .AddDbContextCheck<AuthorizationDbContext>("authorization-database");
 
 builder.Services.AddSingleton<ISystemClock, SystemClock>();
+builder.Services.AddHostedService<ApprovalGrantedConsumer>();
 
 var app = builder.Build();
 
