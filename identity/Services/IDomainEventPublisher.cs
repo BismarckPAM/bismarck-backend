@@ -1,6 +1,8 @@
-namespace Identity.Service.Services;
+using Messaging;
+
+namespace Identity.Service.Services; 
 
 public interface IDomainEventPublisher
 {
-    Task PublishAsync(DomainEventMessage message, CancellationToken cancellationToken = default);
+    Task PublishAsync<T>(string topic, SecurityEvent<T> message, CancellationToken cancellationToken = default);
 }
