@@ -7,6 +7,7 @@ using Resource.Service.DTOs;
 using Resource.Service.Exceptions;
 using Resource.Service.Models;
 using ResourceModel = Resource.Service.Models.Resource;
+using Messaging;
 
 namespace Resource.Service.Services;
 
@@ -34,10 +35,16 @@ public class ResourceService(
         await dbContext.SaveChangesAsync();
 
         var response = mapper.Map<ResourceResponse>(resource);
-        await eventPublisher.PublishAsync(new DomainEventMessage(
+        await eventPublisher.PublishAsync(
+            "resource-events",
+            new SecurityEvent<object>(
+            Guid.NewGuid(),
             "resource-created",
-            response.Id,
             DateTimeOffset.UtcNow,
+            response.Owner,
+            response.Id.ToString(),
+            "RESOURCE_CREATE",
+            "SUCCESS",
             new
             {
                 response.Type,
@@ -96,10 +103,16 @@ public class ResourceService(
         await dbContext.SaveChangesAsync();
 
         var response = mapper.Map<ResourceResponse>(resource);
-        await eventPublisher.PublishAsync(new DomainEventMessage(
+        await eventPublisher.PublishAsync(
+            "resource-events",
+            new SecurityEvent<object>(
+            Guid.NewGuid(),
             "resource-updated",
-            response.Id,
             DateTimeOffset.UtcNow,
+            response.Owner,
+            response.Id.ToString(),
+            "RESOURCE_UPDATE",
+            "SUCCESS",
             new
             {
                 response.Type,
