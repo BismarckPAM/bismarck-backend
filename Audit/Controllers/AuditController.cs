@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Audit.Service.DTOs;
+using Audit.Service.Models;
 using Audit.Service.Services;
 
 namespace Audit.Service.Controllers;
@@ -9,12 +11,17 @@ namespace Audit.Service.Controllers;
 [Route("api/audit/logs")]
 public class AuditController(IAuditService auditService) : ControllerBase
 {
-   
+    // GET /api/audit/logs?user=admin&eventType=security.auth.login&page=1&pageSize=10
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<AuditLog>>> GetPending()
+    [ProducesResponseType(typeof(PagedResult<AuditLog>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<AuditLog>>> GetLogs(
+        [FromQuery] AuditLogQueryParameters query, 
+        CancellationToken cancellationToken)
     {
-        if (!auditService.IsApprover())
-            return Forbid();
-
-        return Ok(await auditService.GetPendingAsync());
+        var result = await auditService.GetLogsAsync(query, cancellationToken);
+        return Ok(result);
     }
+
+    // No create POST, PUT, PATCH, or DELETE
+    // Audit logs must remain strictly immutable
+}
