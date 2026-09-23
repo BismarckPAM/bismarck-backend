@@ -1,6 +1,11 @@
+using Messaging;
+
 namespace Approval.Service.Services;
 
 public interface IDomainEventPublisher
 {
-    Task PublishAsync<T>(DomainEventMessage<T> message, CancellationToken cancellationToken = default);
+    Task PublishAsync<T>(
+        string topic,
+        SecurityEvent<T> message,
+        CancellationToken cancellationToken = default);
 }

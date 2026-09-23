@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Messaging;
 
 namespace Approval.Service.Tests;
 
@@ -157,8 +158,9 @@ public sealed class ApprovalServiceTests
         Assert.Equal(ApprovalStatus.APPROVED, result.Status);
         Assert.Equal("approver-1", result.ReviewedByUserId);
         var publishedEvent = Assert.Single(publisher.Events);
+        Assert.Equal(KafkaTopics.ApprovalGranted, publishedEvent.Topic);
         Assert.Equal("ApprovalGranted", publishedEvent.EventType);
-        Assert.Equal(request.Id, publishedEvent.EntityId);
+        Assert.NotEqual(Guid.Empty, publishedEvent.EventId);
     }
 
     [Fact]
@@ -300,13 +302,14 @@ public sealed class ApprovalServiceTests
         public List<RecordedEvent> Events { get; } = [];
 
         public Task PublishAsync<T>(
-            DomainEventMessage<T> message,
+            string topic,
+            SecurityEvent<T> message,
             CancellationToken cancellationToken = default)
         {
-            Events.Add(new RecordedEvent(message.EventType, message.EntityId));
+            Events.Add(new RecordedEvent(topic, message.EventType, message.EventId));
             return Task.CompletedTask;
         }
 
-        public sealed record RecordedEvent(string EventType, Guid EntityId);
+        public sealed record RecordedEvent(string Topic, string EventType, Guid EventId);
     }
 }

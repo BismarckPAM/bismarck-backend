@@ -6,6 +6,7 @@ public sealed record UserDto(
     bool IsActive);
 
 public sealed record ResourceDto(
+    Guid Id,
     string Type,
     string Environment,
     string Criticality);

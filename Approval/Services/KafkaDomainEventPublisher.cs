@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Confluent.Kafka;
+using Messaging;
 
 namespace Approval.Service.Services;
 
@@ -7,7 +8,7 @@ public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposab
 {
     private readonly IProducer<string, string> producer;
     private readonly ILogger<KafkaDomainEventPublisher> logger;
-    private readonly string topic;
+    private readonly string defaultTopic;
 
     public KafkaDomainEventPublisher(
         IConfiguration configuration,
@@ -15,7 +16,7 @@ public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposab
     {
         this.logger = logger;
         var bootstrapServers = configuration["Kafka:BootstrapServers"] ?? "localhost:9092";
-        topic = configuration["Kafka:ApprovalTopic"] ?? "approval-granted";
+        defaultTopic = configuration["Kafka:ApprovalTopic"] ?? KafkaTopics.ApprovalGranted;
 
         producer = new ProducerBuilder<string, string>(new ProducerConfig
         {
@@ -26,7 +27,8 @@ public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposab
     }
 
     public async Task PublishAsync<T>(
-        DomainEventMessage<T> message,
+        string topic,
+        SecurityEvent<T> message,
         CancellationToken cancellationToken = default)
     {
         try
@@ -37,10 +39,10 @@ public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposab
             });
 
             await producer.ProduceAsync(
-                topic,
+                string.IsNullOrWhiteSpace(topic) ? defaultTopic : topic,
                 new Message<string, string>
                 {
-                    Key = message.EntityId.ToString(),
+                    Key = message.EventId.ToString(),
                     Value = json
                 },
                 cancellationToken);

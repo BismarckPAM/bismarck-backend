@@ -1,6 +1,29 @@
 services:
 
   # ============================================================
+  # Kafka-compatible event broker
+  # ============================================================
+
+  kafka:
+    image: redpandadata/redpanda:v24.3.5
+    container_name: kafka
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --check=false
+      - --node-id=0
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://kafka:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+    volumes:
+      - kafka_data:/var/lib/redpanda/data
+
+  # ============================================================
   # Identity Services
   # ============================================================
 
@@ -40,9 +63,11 @@ services:
         Database=${IDENTITY_DB_NAME};
         Username=${DB_USER};
         Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
 
     depends_on:
       - identity-db
+      - kafka
 
 
   # ============================================================
@@ -84,9 +109,11 @@ services:
         Database=${RESOURCE_DB_NAME};
         Username=${DB_USER};
         Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
 
     depends_on:
       - resource-db
+      - kafka
 
 
   # ============================================================
@@ -128,11 +155,13 @@ services:
         Database=${AUTHORIZATION_DB_NAME};
         Username=${DB_USER};
         Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
 
     depends_on:
       - authorization-db
       - identity_svc
       - resource_svc
+      - kafka
 
 
   # ============================================================
@@ -174,12 +203,56 @@ services:
         Database=${APPROVAL_DB_NAME};
         Username=${DB_USER};
         Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
 
     depends_on:
       - authorization-db
       - identity_svc
       - resource_svc
       - approval-db
+      - kafka
+
+
+  # ============================================================
+  # Audit Services
+  # ============================================================
+
+  audit-db:
+    image: postgres:latest
+    container_name: audit-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${AUDIT_DB_NAME}
+
+    ports:
+      - "${AUDIT_DB_PORT}:5432"
+
+    volumes:
+      - audit_data:/var/lib/postgresql/data
+
+
+  audit_svc:
+    build:
+      context: ./Audit
+      dockerfile: Dockerfile
+
+    container_name: audit_svc
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__AuditDatabase: >-
+        Host=audit-db;
+        Database=${AUDIT_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
+      Kafka__GroupId: bismarck-audit-service
+
+    depends_on:
+      - audit-db
+      - kafka
 
 
   # ============================================================
@@ -215,6 +288,7 @@ services:
       - resource_svc
       - authorization_svc
       - approval_svc
+      - audit_svc
 
 
 # ============================================================
@@ -222,7 +296,9 @@ services:
 # ============================================================
 
 volumes:
+  kafka_data:
   identity_data:
   resource_data:
   authorization_data:
   approval_data:
+  audit_data:
