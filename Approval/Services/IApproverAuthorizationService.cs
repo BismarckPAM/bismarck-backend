@@ -6,7 +6,9 @@ public interface IApproverAuthorizationService
 {
     Task<ApprovalRequestResponse> CreateAsync(CreateApprovalRequestRequest request);
     Task<IEnumerable<ApprovalRequestResponse>> GetPendingAsync();
-    Task<ApprovalRequestResponse> ApproveAsync(Guid id);
+    Task<ApprovalRequestResponse> ApproveAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
     Task<ApprovalRequestResponse> RejectAsync(Guid id, string reason);
     Task<IEnumerable<ApprovalRequestResponse>> GetAllAsync();
     Task<ApprovalRequestResponse> GetByIdAsync(Guid id);
