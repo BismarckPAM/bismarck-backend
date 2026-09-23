@@ -11,6 +11,7 @@ public interface IResourceServiceClient
 }
 
 public sealed record ResourceContext(
+    Guid Id,
     string Type,
     string Environment,
     string Criticality);

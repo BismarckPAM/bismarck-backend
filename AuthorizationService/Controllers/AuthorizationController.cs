@@ -157,7 +157,7 @@ public sealed class AuthorizationController(
 
         var result = await policyDecisionEngine.EvaluateAsync(
             new UserDto(user.Value.Id, user.Value.RoleName, user.Value.IsActive),
-            new ResourceDto(resource.Value.Type, resource.Value.Environment, resource.Value.Criticality),
+            new ResourceDto(resource.Value.Id, resource.Value.Type, resource.Value.Environment, resource.Value.Criticality),
             request.Action,
             cancellationToken);
 
@@ -165,7 +165,7 @@ public sealed class AuthorizationController(
         {
             result = result with
             {
-                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(request.SessionDurationMinutes)
+                ExpiresAt = clock.UtcNow.AddMinutes(request.SessionDurationMinutes)
             };
         }
 
