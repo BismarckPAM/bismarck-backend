@@ -67,6 +67,54 @@ namespace AuthorizationService.Migrations
                             t.HasCheckConstraint("CK_AccessPolicies_MaxAccessLevel", "\"MaxAccessLevel\" BETWEEN 0 AND 5");
                         });
                 });
+
+            modelBuilder.Entity("AuthorizationService.Models.TemporaryPermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApprovalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RequestedLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RevokedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovalId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "ResourceId", "Status", "ExpiresAt");
+
+                    b.ToTable("TemporaryPermissions", t =>
+                        {
+                            t.HasCheckConstraint("CK_TemporaryPermissions_RequestedLevel", "\"RequestedLevel\" BETWEEN 1 AND 5");
+                        });
+                });
 #pragma warning restore 612, 618
         }
     }
