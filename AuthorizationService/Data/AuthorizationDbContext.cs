@@ -7,6 +7,7 @@ public sealed class AuthorizationDbContext(DbContextOptions<AuthorizationDbConte
     : DbContext(options)
 {
     public DbSet<AccessPolicy> AccessPolicies => Set<AccessPolicy>();
+    public DbSet<TemporaryPermission> TemporaryPermissions => Set<TemporaryPermission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +28,31 @@ public sealed class AuthorizationDbContext(DbContextOptions<AuthorizationDbConte
             entity.ToTable(table => table.HasCheckConstraint(
                 "CK_AccessPolicies_MaxAccessLevel",
                 "\"MaxAccessLevel\" BETWEEN 0 AND 5"));
+        });
+
+        modelBuilder.Entity<TemporaryPermission>(entity =>
+        {
+            entity.HasKey(permission => permission.Id);
+
+            entity.HasIndex(permission => permission.ApprovalId)
+                .IsUnique();
+
+            entity.HasIndex(permission => new
+            {
+                permission.UserId,
+                permission.ResourceId,
+                permission.Status,
+                permission.ExpiresAt
+            });
+
+            entity.Property(permission => permission.Status)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .IsRequired();
+
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_TemporaryPermissions_RequestedLevel",
+                "\"RequestedLevel\" BETWEEN 1 AND 5"));
         });
     }
 }
