@@ -1,27 +1,48 @@
 using System.Text.Json;
+using Confluent.Kafka;
+using Messaging;
 
 namespace Resource.Service.Services;
 
-public sealed class KafkaDomainEventPublisher : IDomainEventPublisher
+public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposable
 {
-    private readonly string _topic;
+    private readonly IProducer<string, string> producer;
+    private readonly ILogger<KafkaDomainEventPublisher> logger;
+    private readonly string defaultTopic;
 
-    public KafkaDomainEventPublisher(IConfiguration configuration)
+    public KafkaDomainEventPublisher(IConfiguration configuration, ILogger<KafkaDomainEventPublisher> logger)
     {
-        _topic = configuration["Kafka:Topic"] ?? "bismarck.domain-events";
+        this.logger = logger;
+        defaultTopic = configuration["Kafka:Topic"] ?? "resource-events";
+        producer = new ProducerBuilder<string, string>(new ProducerConfig
+        {
+            BootstrapServers = configuration["Kafka:BootstrapServers"] ?? "localhost:9092",
+            Acks = Acks.All,
+            EnableIdempotence = true
+        }).Build();
     }
 
-    public Task PublishAsync(DomainEventMessage message, CancellationToken cancellationToken = default)
+    public async Task PublishAsync<T>(
+        string topic,
+        SecurityEvent<T> message,
+        CancellationToken cancellationToken = default)
     {
-        var payload = JsonSerializer.Serialize(new
+        var json = JsonSerializer.Serialize(message, new JsonSerializerOptions
         {
-            eventType = message.EventType,
-            entityId = message.EntityId,
-            timestamp = message.Timestamp,
-            payload = message.Payload
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         });
+        var targetTopic = string.IsNullOrWhiteSpace(topic) ? defaultTopic : topic;
+        await producer.ProduceAsync(targetTopic, new Message<string, string>
+        {
+            Key = message.EventId.ToString(),
+            Value = json
+        }, cancellationToken);
+        logger.LogInformation("Published event {EventId} to {Topic}", message.EventId, targetTopic);
+    }
 
-        Console.WriteLine($"[Kafka] {_topic}: {payload}");
-        return Task.CompletedTask;
+    public void Dispose()
+    {
+        producer.Flush(TimeSpan.FromSeconds(5));
+        producer.Dispose();
     }
 }
