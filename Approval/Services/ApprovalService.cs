@@ -34,35 +34,27 @@ public sealed class ApprovalService(
 	}
 
 	public async Task<ApprovalRequestResponse> ApproveAsync(Guid id)
+	
 	{
-		var reviewerUserId = GetCurrentUserId();
-		var reviewedAt = DateTime.UtcNow;
-		var updatedRows = await dbContext.ApprovalRequests
-			.Where(item => item.Id == id && item.Status == ApprovalStatus.PENDING)
-			.ExecuteUpdateAsync(setters => setters
-				.SetProperty(item => item.Status, ApprovalStatus.APPROVED)
-				.SetProperty(item => item.ReviewedAt, reviewedAt)
-				.SetProperty(item => item.ReviewedByUserId, reviewerUserId));
+	    var approvedRequest = await GetByIdAsync(id);
+    
+        var payload = new ApprovalGrantedPayload(
+            approvedRequest.RequesterUserId,
+            approvedRequest.ResourceId,
+            approvedRequest.RequestedLevel,
+            approvedRequest.DurationMinutes,
+            approvedRequest.ReviewedByUserId,
+            approvedRequest.ReviewedAt
+);  
 
-		if (updatedRows == 0)
-			throw await GetActionFailureAsync(id);
+    await domainEventPublisher.PublishAsync(new DomainEventMessage<ApprovalGrantedPayload>(
+        "ApprovalGranted",
+        approvedRequest.Id,
+        DateTimeOffset.UtcNow,
+        payload
+    ));
 
-		var approvedRequest = await GetByIdAsync(id);
-		await domainEventPublisher.PublishAsync(new DomainEventMessage(
-			"ApprovalGranted",
-			approvedRequest.Id,
-			DateTimeOffset.UtcNow,
-			new
-			{
-				approvedRequest.RequesterUserId,
-				approvedRequest.ResourceId,
-				approvedRequest.RequestedLevel,
-				approvedRequest.DurationMinutes,
-				approvedRequest.ReviewedByUserId,
-				approvedRequest.ReviewedAt
-			}));
-
-		return approvedRequest;
+    return approvedRequest;
 	}
 
 	public async Task<ApprovalRequestResponse> RejectAsync(Guid id, string reason)
