@@ -75,6 +75,8 @@ builder.Services
     .AddHealthChecks()
     .AddDbContextCheck<AuthorizationDbContext>("authorization-database");
 
+builder.Services.AddSingleton<ISystemClock, SystemClock>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Environment.IsEnvironment("Testing"))
