@@ -1,7 +1,8 @@
+using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
 using Microsoft.EntityFrameworkCore;
-using Npgsql; 
+using Npgsql;
 using Audit.Service.Data;
 using Audit.Service.Models;
 using Messaging;
@@ -28,15 +29,25 @@ public class KafkaAuditConsumer : BackgroundService
     {
         await Task.Yield();
 
-        var config = new ConsumerConfig
+        var bootstrapServers = _configuration["Kafka:BootstrapServers"] ?? "localhost:9092";
+        var deadLetterTopic = _configuration["Kafka:DeadLetterTopic"] ?? "audit-dead-letter";
+
+        var consumerConfig = new ConsumerConfig
         {
-            BootstrapServers = _configuration["Kafka:BootstrapServers"] ?? "localhost:9092",
+            BootstrapServers = bootstrapServers,
             GroupId = _configuration["Kafka:GroupId"] ?? "bismarck-audit-service",
             EnableAutoCommit = false,
             AutoOffsetReset = AutoOffsetReset.Earliest
         };
 
-        using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
+        var producerConfig = new ProducerConfig
+        {
+            BootstrapServers = bootstrapServers,
+            Acks = Acks.All // Ensure dead-letter messages are safely acknowledged
+        };
+
+        using var consumer = new ConsumerBuilder<Ignore, string>(consumerConfig).Build();
+        using var deadLetterProducer = new ProducerBuilder<Null, string>(producerConfig).Build();
 
         var topics = new[]
         {
@@ -50,8 +61,8 @@ public class KafkaAuditConsumer : BackgroundService
         };
 
         consumer.Subscribe(topics);
-        _logger.LogInformation("KafkaAuditConsumer started with GroupId '{GroupId}'. Subscribed to topics: {Topics}", 
-            config.GroupId, string.Join(", ", topics));
+        _logger.LogInformation("KafkaAuditConsumer started with GroupId '{GroupId}'. Subscribed to: {Topics}", 
+            consumerConfig.GroupId, string.Join(", ", topics));
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -64,35 +75,59 @@ public class KafkaAuditConsumer : BackgroundService
                     continue;
                 }
 
-                // Deserialize event
+                // Deserialize event with Dead-Letter Handling
                 SecurityEvent<JsonElement>? secEvent = null;
+                string? deserializationError = null;
+
                 try
                 {
                     var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                     secEvent = JsonSerializer.Deserialize<SecurityEvent<JsonElement>>(consumeResult.Message.Value, jsonOptions);
+
+                    if (secEvent is null || secEvent.EventId == Guid.Empty)
+                    {
+                        deserializationError = "Event payload deserialized to null or contains an empty EventId.";
+                    }
                 }
                 catch (JsonException ex)
                 {
-                    // Do NOT commit on malformed JSON. Throw to trigger retry / alert.
-                    throw new FormatException($"Malformed JSON message at topic {consumeResult.Topic}, offset {consumeResult.Offset}", ex);
+                    deserializationError = $"Malformed JSON: {ex.Message}";
                 }
 
-                if (secEvent is null || secEvent.EventId == Guid.Empty)
+                // If invalid/malformed -> forward to DEAD-LETTER TOPIC and then commit
+                if (deserializationError is not null)
                 {
-                    // Do NOT commit invalid payload.
-                    throw new FormatException($"Deserialized event is null or has empty EventId at topic {consumeResult.Topic}, offset {consumeResult.Offset}");
+                    _logger.LogWarning("Routing malformed message from topic {Topic} to DLQ '{DeadLetterTopic}'. Reason: {Reason}", 
+                        consumeResult.Topic, deadLetterTopic, deserializationError);
+
+                    var dltHeaders = new Headers
+                    {
+                        { "x-original-topic", Encoding.UTF8.GetBytes(consumeResult.Topic) },
+                        { "x-original-offset", Encoding.UTF8.GetBytes(consumeResult.Offset.Value.ToString()) },
+                        { "x-exception-message", Encoding.UTF8.GetBytes(deserializationError) }
+                    };
+
+                    await deadLetterProducer.ProduceAsync(deadLetterTopic, new Message<Null, string>
+                    {
+                        Value = consumeResult.Message.Value,
+                        Headers = dltHeaders
+                    }, stoppingToken);
+
+                    // Once safely inside the Dead-Letter Topic, commit the offset so the consumer does not get blocked
+                    consumer.Commit(consumeResult);
+                    continue;
                 }
 
                 using var scope = _scopeFactory.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
 
-                // Check if EventId already exists in database 
+                // Check if EventId already exists in database (Idempotency)
                 bool alreadyExists = await dbContext.AuditLogs
-                    .AnyAsync(a => a.EventId == secEvent.EventId, stoppingToken);
+                    .AnyAsync(a => a.EventId == secEvent!.EventId, stoppingToken);
 
                 if (alreadyExists)
                 {
-                    _logger.LogWarning("Duplicate event detected (EventId: {EventId}). Skipping insert and committing offset.", secEvent.EventId);
+                    _logger.LogWarning("Duplicate event detected (EventId: {EventId}). Skipping insert and committing offset.", secEvent!.EventId);
                     consumer.Commit(consumeResult);
                     continue;
                 }
@@ -101,7 +136,7 @@ public class KafkaAuditConsumer : BackgroundService
                 var auditLog = new AuditLog
                 {
                     Id = Guid.NewGuid(),
-                    EventId = secEvent.EventId,
+                    EventId = secEvent!.EventId,
                     EventType = secEvent.EventType,
                     OccurredAt = secEvent.OccurredAt,
                     Actor = secEvent.Actor,
@@ -116,30 +151,28 @@ public class KafkaAuditConsumer : BackgroundService
 
                 dbContext.AuditLogs.Add(auditLog);
 
-                // SaveChangesAsync
+                // SaveChangesAsync with Strict Outage Handling
                 try
                 {
                     await dbContext.SaveChangesAsync(stoppingToken);
                 }
                 catch (DbUpdateException ex)
                 {
-                    // Only ignore if it is a CONFIRMED duplicate EventId 
-                    bool isConfirmedDuplicate = ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }
-                        || await dbContext.AuditLogs.AsNoTracking().AnyAsync(a => a.EventId == secEvent.EventId, stoppingToken);
-
-                    if (isConfirmedDuplicate)
+                    // Strictly check if this is a PostgreSQL Unique Constraint Violation 
+                    if (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
                     {
-                        _logger.LogWarning("Confirmed duplicate EventId {EventId} during insert. Proceeding to commit.", secEvent.EventId);
+                        _logger.LogWarning("EventId {EventId} was inserted by another consumer instance. Skipping duplicate.", secEvent.EventId);
                     }
                     else
                     {
-                        // Any other database outage/error MUST throw and retry
-                        _logger.LogError(ex, "Database update failed with a non-duplicate error for EventId {EventId}. Retrying without committing.", secEvent.EventId);
+                        // Any other database outage (connection timeout, server reboot, network break)
+                        // MUST throw so the offset remains UNCOMMITTED for Kafka to retry
+                        _logger.LogError(ex, "Database save failed due to infrastructure or database outage for EventId {EventId}. Leaving offset uncommitted.", secEvent.EventId);
                         throw; 
                     }
                 }
 
-                // Commit Kafka offset 
+                // Commit Kafka offset strictly AFTER save or duplicate confirmation
                 consumer.Commit(consumeResult);
 
                 _logger.LogInformation("Successfully processed and committed audit event {EventId} from topic {Topic}", 
@@ -152,8 +185,8 @@ public class KafkaAuditConsumer : BackgroundService
             }
             catch (Exception ex)
             {
-                // Unhandled DB outage or deserialization failure reaches here:
-                // Offset is NEVER committed -> message will be retried
+                // Unhandled DB outage reaches here:
+                // Offset is NEVER committed -> Kafka will deliver the message again
                 _logger.LogError(ex, "Error processing event. Offset will NOT be committed. Retrying in 2 seconds...");
                 await Task.Delay(2000, stoppingToken);
             }
