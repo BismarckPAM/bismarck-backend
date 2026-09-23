@@ -6,6 +6,7 @@ using AuthorizationService.Data;
 using AuthorizationService.DTOs;
 using AuthorizationService.Models;
 using AuthorizationService.Services;
+using Messaging;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -337,10 +338,12 @@ public sealed class AuthorizationControllerTests
         Mock<IResourceServiceClient> resource,
         Mock<IPolicyDecisionEngine> engine)
     {
+        var eventPublisher = new Mock<IAuthorizationEventPublisher>();
         return new AuthorizationController(
             identity.Object,
             resource.Object,
-            engine.Object);
+            engine.Object,
+            eventPublisher.Object);
     }
 
     private static void AssertDenial(

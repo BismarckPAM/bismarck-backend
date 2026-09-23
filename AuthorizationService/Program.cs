@@ -70,6 +70,7 @@ var connectionString = builder.Configuration.GetConnectionString("AuthorizationD
 builder.Services.AddDbContext<AuthorizationDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddScoped<IPolicyDecisionEngine, PolicyDecisionEngine>();
+builder.Services.AddSingleton<IAuthorizationEventPublisher, KafkaAuthorizationEventPublisher>();
 builder.Services
     .AddHealthChecks()
     .AddDbContextCheck<AuthorizationDbContext>("authorization-database");
