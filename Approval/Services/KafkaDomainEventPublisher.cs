@@ -26,33 +26,33 @@ public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposab
         _producer = new ProducerBuilder<string, string>(config).Build();
     }
 
-    public async Task PublishAsync<T>(DomainEventMessage<T> message)
-    {
-        try
-        {
-            var json = JsonSerializer.Serialize(message, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
-
-            var kafkaMessage = new Message<string, string>
-            {
-                Key = message.AggregateId.ToString(), // Partitions by Aggregate ID
-                Value = json
-            };
-
-            await _producer.ProduceAsync(_topic, kafkaMessage);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish event {EventType} to Kafka topic {Topic}", message.EventType, _topic);
-            throw;
-        }
-    }
-
-    public void Dispose()
-    {
-        _producer.Flush(TimeSpan.FromSeconds(5));
-        _producer.Dispose();
-    }
-}
+    public async Task PublishAsync<T>(DomainEventMessage<T> message, CancellationToken cancellationToken = default)
+    {     
+           try
+        {     
+               var json = JsonSerializer.Serialize(message, new JsonSerializerOptions
+            {     
+                   PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });     
+    
+                var kafkaMessage = new Message<string, string>
+            {     
+                   Key = message.AggregateId.ToString(), // Partitions by Aggregate ID
+                Value = json     
+            };     
+    
+                // 1. Pass cancellationToken here:
+            await _producer.ProduceAsync(_topi     c, kafkaMessage, cancellationToken);
+        }     
+        c     atch (OperationCanceledException)
+        {     
+               // Expected if user aborted request or service is shutting down
+            _logger.LogWarning("Publishing event {EventType} to topic {Topi     c} was canceled.", message.EventType, _topic);
+            throw;     
+        }     
+        c     atch (Exception ex)
+        {     
+               _logger.LogError(ex, "Failed to publish event {EventType} to Kafka topic {Topic}", message.EventType, _topic);
+            throw;     
+        }     
+    }     
