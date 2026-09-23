@@ -3,6 +3,7 @@ using Approval.Service.Data;
 using Approval.Service.DTOs;
 using Approval.Service.Models;
 using Microsoft.EntityFrameworkCore;
+using Messaging;
 
 namespace Approval.Service.Services;
 
@@ -64,10 +65,15 @@ public sealed class ApprovalService(
     
         // Pass cancellationToken to Kafka publisher
         await domainEventPublisher.PublishAsync(
-            new DomainEventMessage<ApprovalGrantedPayload>(
+			KafkaTopics.ApprovalGranted,
+			new SecurityEvent<ApprovalGrantedPayload>(
+				Guid.NewGuid(),
                 "ApprovalGranted",
-                approvedRequest.Id,
                 DateTimeOffset.UtcNow,
+				approvedRequest.ReviewedByUserId ?? reviewerUserId,
+				approvedRequest.ResourceId,
+				"ELEVATED_ACCESS",
+				"APPROVED",
                 payload
             ),
             cancellationToken
