@@ -6,6 +6,7 @@ using Identity.Service.Mappings;
 using Identity.Service.Models;
 using Identity.Service.Services;
 using Identity.Service.Validators;
+using Messaging;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -172,12 +173,17 @@ public class UserServiceTests
 
     private sealed class RecordingDomainEventPublisher : IDomainEventPublisher
     {
-        public List<DomainEventMessage> Events { get; } = new();
+        public List<RecordedEvent> Events { get; } = new();
 
-        public Task PublishAsync(DomainEventMessage message, CancellationToken cancellationToken = default)
+        public Task PublishAsync<T>(
+            string topic,
+            SecurityEvent<T> message,
+            CancellationToken cancellationToken = default)
         {
-            Events.Add(message);
+            Events.Add(new RecordedEvent(topic, message.EventType, message.EventId));
             return Task.CompletedTask;
         }
+
+        public sealed record RecordedEvent(string Topic, string EventType, Guid EventId);
     }
 }
