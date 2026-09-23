@@ -182,6 +182,7 @@ public sealed class AuthorizationControllerTests
         var identity = new Mock<IIdentityServiceClient>();
         var resource = new Mock<IResourceServiceClient>();
         var engine = new Mock<IPolicyDecisionEngine>();
+        var eventPublisher = new Mock<IAuthorizationEventPublisher>();
         identity.Setup(client => client.GetUserRoleAsync(userId, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ServiceLookupResult<IdentityUser>(
                 new IdentityUser(userId, Guid.NewGuid(), "Developer", true)));
@@ -192,7 +193,7 @@ public sealed class AuthorizationControllerTests
                 It.IsAny<UserDto>(), It.IsAny<ResourceDto>(), "SSH_ACCESS", It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthorizationDecisionResult.Allow(TimeSpan.FromMinutes(1)));
 
-        var result = await CreateController(identity, resource, engine).Check(
+        var result = await CreateController(identity, resource, engine, eventPublisher).Check(
             new AuthorizationCheckRequest(userId, resourceId, "SSH_ACCESS", 15),
             CancellationToken.None);
 
@@ -206,6 +207,13 @@ public sealed class AuthorizationControllerTests
         identity.VerifyAll();
         resource.VerifyAll();
         engine.VerifyAll();
+        eventPublisher.Verify(publisher => publisher.PublishAsync(
+            KafkaTopics.AccessGranted,
+            It.Is<SecurityEvent<object>>(eventMessage =>
+                eventMessage.EventType == "AccessGranted"
+                && eventMessage.EventId != Guid.Empty
+                && eventMessage.Outcome == "ALLOWED"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -336,9 +344,10 @@ public sealed class AuthorizationControllerTests
     private static AuthorizationController CreateController(
         Mock<IIdentityServiceClient> identity,
         Mock<IResourceServiceClient> resource,
-        Mock<IPolicyDecisionEngine> engine)
+        Mock<IPolicyDecisionEngine> engine,
+        Mock<IAuthorizationEventPublisher>? eventPublisher = null)
     {
-        var eventPublisher = new Mock<IAuthorizationEventPublisher>();
+        eventPublisher ??= new Mock<IAuthorizationEventPublisher>();
         return new AuthorizationController(
             identity.Object,
             resource.Object,
