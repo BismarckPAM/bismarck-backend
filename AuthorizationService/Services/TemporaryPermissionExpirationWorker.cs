@@ -1,5 +1,3 @@
-using System.Text.Json;
-using Confluent.Kafka;
 using Microsoft.EntityFrameworkCore;
 using AuthorizationService.Data;
 using AuthorizationService.Models;
@@ -13,6 +11,7 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
     private readonly ISystemClock _clock;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TemporaryPermissionExpirationWorker> _logger;
+    private readonly IAuthorizationEventPublisher _eventPublisher;
 
     // Check every 30 seconds 
     private readonly TimeSpan _checkInterval;
@@ -21,12 +20,14 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
         IServiceScopeFactory scopeFactory,
         ISystemClock clock,
         IConfiguration configuration,
-        ILogger<TemporaryPermissionExpirationWorker> logger)
+        ILogger<TemporaryPermissionExpirationWorker> logger,
+        IAuthorizationEventPublisher eventPublisher)
     {
         _scopeFactory = scopeFactory;
         _clock = clock;
         _configuration = configuration;
         _logger = logger;
+        _eventPublisher = eventPublisher;
 
         var intervalSeconds = configuration.GetValue("ExpirationWorker:IntervalSeconds", 30);
         _checkInterval = TimeSpan.FromSeconds(intervalSeconds);
@@ -36,13 +37,6 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
     {
         await Task.Yield();
 
-        var producerConfig = new ProducerConfig
-        {
-            BootstrapServers = _configuration["Kafka:BootstrapServers"] ?? "localhost:9092",
-            Acks = Acks.All
-        };
-
-        using var producer = new ProducerBuilder<string, string>(producerConfig).Build();
         using var timer = new PeriodicTimer(_checkInterval);
 
         _logger.LogInformation("TemporaryPermissionExpirationWorker started. Interval: {Interval}s", _checkInterval.TotalSeconds);
@@ -51,7 +45,7 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
         {
             try
             {
-                await ExpirePermissionsAsync(producer, stoppingToken);
+                await ExpirePermissionsOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -63,11 +57,10 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
             }
         }
 
-        producer.Flush(TimeSpan.FromSeconds(5));
         _logger.LogInformation("TemporaryPermissionExpirationWorker stopped.");
     }
 
-    private async Task ExpirePermissionsAsync(IProducer<string, string> producer, CancellationToken ct)
+    public async Task ExpirePermissionsOnceAsync(CancellationToken ct = default)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AuthorizationDbContext>();
@@ -100,8 +93,6 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
         await dbContext.SaveChangesAsync(ct);
 
         // Publish PermissionRevoked event for each expired record
-        var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-
         foreach (var permission in expiredPermissions)
         {
             var revokedEvent = new SecurityEvent<object>(
@@ -126,20 +117,17 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
                 }
             );
 
-            var json = JsonSerializer.Serialize(revokedEvent, jsonOptions);
-
             try
             {
-                await producer.ProduceAsync(KafkaTopics.PermissionRevoked, new Message<string, string>
-                {
-                    Key = permission.UserId.ToString(), 
-                    Value = json
-                }, ct);
+                await _eventPublisher.PublishAsync(
+                    KafkaTopics.PermissionRevoked,
+                    revokedEvent,
+                    ct);
 
                 _logger.LogInformation("Published PermissionRevoked event for PermissionId {PermissionId} (UserId {UserId})", 
                     permission.Id, permission.UserId);
             }
-            catch (ProduceException<string, string> ex)
+            catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to publish PermissionRevoked event for PermissionId {PermissionId}", permission.Id);
             }
