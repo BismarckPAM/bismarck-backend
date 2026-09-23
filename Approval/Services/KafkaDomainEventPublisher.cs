@@ -43,16 +43,39 @@ public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposab
     
                 // 1. Pass cancellationToken here:
             await _producer.ProduceAsync(_topi     c, kafkaMessage, cancellationToken);
-        }     
+                        public KafkaDomainEventPublisher(
+                            IConfiguration configuration,
+                            ILogger<KafkaDomainEventPublisher> logger)
         c     atch (OperationCanceledException)
         {     
                // Expected if user aborted request or service is shutting down
-            _logger.LogWarning("Publishing event {EventType} to topic {Topi     c} was canceled.", message.EventType, _topic);
+                            _topic = configuration["Kafka:ApprovalTopic"] ?? "approval-granted";
             throw;     
-        }     
-        c     atch (Exception ex)
-        {     
-               _logger.LogError(ex, "Failed to publish event {EventType} to Kafka topic {Topic}", message.EventType, _topic);
-            throw;     
-        }     
+                            producer = new ProducerBuilder<string, string>(new ProducerConfig
+                            {
+                                BootstrapServers = bootstrapServers,
+                                Acks = Acks.All,
+                                EnableIdempotence = true
+                            }).Build();
+                        }
+
+                        public async Task PublishAsync<T>(
+                            DomainEventMessage<T> message,
+                            CancellationToken cancellationToken = default)
+                        {
+                            try
+                            {
+                                var json = JsonSerializer.Serialize(message, new JsonSerializerOptions
+                                {
+                                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                                });
+
+                                await producer.ProduceAsync(
+                                    _topic,
+                                    new Message<string, string>
+                                    {
+                                        Key = message.EntityId.ToString(),
+                                        Value = json
+                                    },
+                                    cancellationToken);
     }     
