@@ -255,6 +255,55 @@ services:
       - kafka
 
 
+# ============================================================
+  # Notification Services
+  # ============================================================
+
+  notification-db:
+    image: postgres:latest
+    container_name: notification-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME}
+
+    ports:
+      - "${NOTIFICATION_DB_PORT}:5432"
+
+    volumes:
+      - notification_data:/var/lib/postgresql/data
+
+
+
+  notification_svc:
+    build:
+      context: ./notification
+      dockerfile: Dockerfile
+
+    container_name: notification_svc
+
+    # No host port mapping.
+    # The API Gateway is the only external entry point.
+    # Internal URL:
+    # http://notification_svc:8080
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      ConnectionStrings__DefaultConnection: >-
+        Host=notification-db;
+        Database=${NOTIFICATION_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
+      Kafka__GroupId: bismarck-notification-service
+
+    depends_on:
+      - notification-db
+      - kafka
+
+
   # ============================================================
   # API Gateway
   # ============================================================
@@ -288,6 +337,7 @@ services:
       - resource_svc
       - authorization_svc
       - approval_svc
+      - notification_svc
       - audit_svc
 
 
@@ -302,3 +352,4 @@ volumes:
   authorization_data:
   approval_data:
   audit_data:
+  notification_data:
