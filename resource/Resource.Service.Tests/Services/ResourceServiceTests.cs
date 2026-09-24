@@ -431,10 +431,17 @@ public class ResourceServiceTests
             SecurityEvent<T> message,
             CancellationToken cancellationToken = default)
         {
-            Events.Add(new RecordedEvent(topic, message.EventType, message.EventId));
+            Events.Add(new RecordedEvent(topic, message.EventType, message.EventId, message.Resource));
             return Task.CompletedTask;
         }
 
-        public sealed record RecordedEvent(string Topic, string EventType, Guid EventId);
+        public sealed record RecordedEvent(string Topic, string EventType, Guid EventId, string? Resource)
+        {
+            // The published SecurityEvent carries the entity identifier in its
+            // Resource envelope property (see ResourceService.CreateAsync/UpdateAsync),
+            // so expose it under the domain-friendly name the tests assert against.
+            public Guid EntityId =>
+                Guid.TryParse(Resource, out var id) ? id : Guid.Empty;
+        }
     }
 }

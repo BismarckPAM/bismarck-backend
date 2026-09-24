@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Approval.Service.Data;
+using Approval.Service.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,19 @@ public sealed class ApprovalApiFixture : WebApplicationFactory<Program>, IAsyncL
             services.Remove(descriptor);
             services.AddDbContext<ApprovalDbContext>(options =>
                 options.UseNpgsql(database.GetConnectionString()));
+
+            // Replace the production Kafka publisher with an in-memory no-op.
+            // Integration tests do not run a Kafka broker, and the real
+            // KafkaDomainEventPublisher blocks (then times out) when it cannot
+            // reach one — which previously hung the entire test run.
+            var publisherDescriptor = services.SingleOrDefault(
+                service => service.ServiceType == typeof(IDomainEventPublisher));
+            if (publisherDescriptor is not null)
+            {
+                services.Remove(publisherDescriptor);
+            }
+
+            services.AddSingleton<IDomainEventPublisher, NoOpDomainEventPublisher>();
         });
     }
 
