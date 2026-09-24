@@ -278,9 +278,8 @@ services:
 
   notification_svc:
     build:
-      context: ./Notification
-      dockerfile: Dockerfile
-
+      context: .
+      dockerfile: Notification/Dockerfile
     container_name: notification_svc
 
     # No host port mapping.

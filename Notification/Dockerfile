@@ -1,17 +1,17 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
 WORKDIR /src
 
-# 1. Copy project files preserving relative paths
-COPY notification/Notification.Service.csproj notification/
+# 1. Copy csproj files from repository root
+COPY Notification/Notification.Service.csproj Notification/
 COPY BuildingBlocks/Messaging/Messaging.csproj BuildingBlocks/Messaging/
-RUN dotnet restore "notification/Notification.Service.csproj"
+RUN dotnet restore "Notification/Notification.Service.csproj"
 
 FROM restore AS build
-# 2. Copy source codes preserving relative paths
-COPY notification/ notification/
+# 2. Copy source codes
+COPY Notification/ Notification/
 COPY BuildingBlocks/Messaging/ BuildingBlocks/Messaging/
 
-WORKDIR /src/notification
+WORKDIR /src/Notification
 RUN dotnet build "Notification.Service.csproj" --no-restore --configuration Release --output /app/build
 
 FROM build AS publish
