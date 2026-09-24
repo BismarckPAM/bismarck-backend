@@ -4,7 +4,7 @@ using Notification.Service.DTOs;
 using Notification.Service.Models;
 using Notification.Service.Services;
 
-namespace Audit.Service.Controllers;
+namespace Notification.Service.Controllers;
 
 [Authorize]
 [ApiController]
@@ -13,14 +13,13 @@ public class NotificationsController(INotificationService notificationService) :
 {
     // GET /api/notifications/{userId}?page=1&pageSize=10
     [HttpGet]
-    [ProducesResponseType(typeof(PagedResult<Notification>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<Notification>>> GetNotifications(
+    [ProducesResponseType(typeof(PagedResult<NotificationResponseDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<NotificationResponseDto>>> GetNotifications(
         [FromRoute] Guid userId,
-        [FromQuery] AuditLogQueryParameters query, 
+        [FromQuery] NotificationQueryParameters query, 
         CancellationToken cancellationToken)
     {
-        var result = await  notificationService.GetLogsAsync(query, cancellationToken);
-        return Ok(result);
+     var result = await notificationService.GetUserNotificationsAsync(userId, query, cancellationToken);        return Ok(result);
     }
 
     // No create POST, PUT, PATCH, or DELETE
