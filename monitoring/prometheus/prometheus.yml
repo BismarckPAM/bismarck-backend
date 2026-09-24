@@ -1,0 +1,72 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets:
+          - "prometheus:9090"
+
+  - job_name: "identity-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "identity_svc:8080"
+        labels:
+          service: "identity"
+
+  - job_name: "resource-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "resource_svc:8080"
+        labels:
+          service: "resource"
+
+  - job_name: "authorization-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "authorization_svc:8080"
+        labels:
+          service: "authorization"
+
+  - job_name: "approval-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "approval_svc:8080"
+        labels:
+          service: "approval"
+
+  - job_name: "audit-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "audit_svc:8080"
+        labels:
+          service: "audit"
+
+  - job_name: "notification-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "notification_svc:8080"
+        labels:
+          service: "notification"
+
+  - job_name: "gateway-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "gateway_svc:8080"
+        labels:
+          service: "gateway"
+
+  - job_name: "kafka-exporter"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "kafka-exporter:9308"
