@@ -45,8 +45,8 @@ services:
 
   identity_svc:
     build:
-      context: ./identity
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: identity/Dockerfile
 
     container_name: identity_svc
 
@@ -92,8 +92,8 @@ services:
 
   resource_svc:
     build:
-      context: ./resource
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: resource/Dockerfile
 
     container_name: resource_svc
 
@@ -138,8 +138,8 @@ services:
 
   authorization_svc:
     build:
-      context: ./AuthorizationService
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: AuthorizationService/Dockerfile
 
     container_name: authorization_svc
 
@@ -186,8 +186,8 @@ services:
 
   approval_svc:
     build:
-      context: ./Approval
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Approval/Dockerfile
 
     container_name: approval_svc
 
@@ -235,8 +235,8 @@ services:
 
   audit_svc:
     build:
-      context: ./Audit
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Audit/Dockerfile
 
     container_name: audit_svc
 
@@ -278,9 +278,8 @@ services:
 
   notification_svc:
     build:
-      context: ./Notification
-      dockerfile: Dockerfile
-
+      context: .
+      dockerfile: Notification/Dockerfile
     container_name: notification_svc
 
     # No host port mapping.
@@ -310,8 +309,8 @@ services:
 
   gateway_svc:
     build:
-      context: ./gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: gateway/Dockerfile
 
     container_name: gateway_svc
 

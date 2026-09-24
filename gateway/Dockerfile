@@ -1,12 +1,11 @@
-# Multi-stage build: restore -> build -> publish -> minimal runtime image.
-# The runtime image is aspnet (not the full SDK), matching the other services.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
 WORKDIR /src
-COPY Gateway.Service.csproj .
-RUN dotnet restore "Gateway.Service.csproj"
+COPY gateway/Gateway.Service.csproj gateway/
+RUN dotnet restore "gateway/Gateway.Service.csproj"
 
 FROM restore AS build
-COPY . .
+COPY gateway/ gateway/
+WORKDIR /src/gateway
 RUN dotnet build "Gateway.Service.csproj" --no-restore --configuration Release --output /app/build
 
 FROM build AS publish
