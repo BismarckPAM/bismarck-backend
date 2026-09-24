@@ -5,12 +5,18 @@ using Identity.Service.DTOs;
 using Identity.Service.Exceptions;
 using Identity.Service.Models;
 using Microsoft.EntityFrameworkCore;
+using Messaging;
 
 namespace Identity.Service.Services;
 
-public class UserService(IdentityDbContext dbContext, IMapper mapper, IPasswordHasher? passwordHasher = null) : IUserService
+public class UserService(
+    IdentityDbContext dbContext,
+    IMapper mapper,
+    IPasswordHasher? passwordHasher = null,
+    IDomainEventPublisher? publisher = null) : IUserService
 {
     private readonly IPasswordHasher passwordHasher = passwordHasher ?? new PasswordHasher();
+    private readonly IDomainEventPublisher domainEventPublisher = publisher ?? new NullDomainEventPublisher();
 
     public async Task<UserResponse> CreateAsync(CreateUserRequest request, CancellationToken cancellationToken = default)
     {
@@ -24,7 +30,28 @@ public class UserService(IdentityDbContext dbContext, IMapper mapper, IPasswordH
         dbContext.Users.Add(user);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return await ProjectUser(dbContext.Users.Where(item => item.Id == user.Id), cancellationToken);
+        var response = await ProjectUser(dbContext.Users.Where(item => item.Id == user.Id), cancellationToken);
+        await domainEventPublisher.PublishAsync(
+            "identity-events",
+            new SecurityEvent<object>(
+            Guid.NewGuid(),
+            "user-created",
+            DateTimeOffset.UtcNow,
+            response.Id.ToString(),
+            null,
+            "USER_CREATE",
+            "SUCCESS",
+            new
+            {
+                response.FullName,
+                response.Email,
+                response.RoleId,
+                response.DepartmentId,
+                response.IsActive,
+                response.CreatedAt
+            }), cancellationToken);
+
+        return response;
     }
 
     public async Task<IReadOnlyList<UserResponse>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -55,7 +82,28 @@ public class UserService(IdentityDbContext dbContext, IMapper mapper, IPasswordH
         user.Email = request.Email.Trim().ToLowerInvariant();
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return await ProjectUser(dbContext.Users.IgnoreQueryFilters().Where(item => item.Id == id), cancellationToken);
+        var response = await ProjectUser(dbContext.Users.IgnoreQueryFilters().Where(item => item.Id == id), cancellationToken);
+        await domainEventPublisher.PublishAsync(
+            "identity-events",
+            new SecurityEvent<object>(
+            Guid.NewGuid(),
+            "user-updated",
+            DateTimeOffset.UtcNow,
+            response.Id.ToString(),
+            null,
+            "USER_UPDATE",
+            "SUCCESS",
+            new
+            {
+                response.FullName,
+                response.Email,
+                response.RoleId,
+                response.DepartmentId,
+                response.IsActive,
+                response.CreatedAt
+            }), cancellationToken);
+
+        return response;
     }
 
     public async Task<UserResponse> DeleteAsync(Guid id, CancellationToken cancellationToken = default)

@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\AuthorizationService\AuthorizationService.csproj" />
+    <ProjectReference Include="..\BuildingBlocks\Messaging\Messaging.csproj" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />

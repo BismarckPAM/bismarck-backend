@@ -6,6 +6,7 @@ using Identity.Service.Mappings;
 using Identity.Service.Models;
 using Identity.Service.Services;
 using Identity.Service.Validators;
+using Messaging;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -81,6 +82,40 @@ public class UserServiceTests
     }
 
     [Fact]
+    public async Task CreatePublishesUserCreatedEvent()
+    {
+        await using var context = CreateContext();
+        var (role, department) = SeedReferences(context);
+        var publisher = new RecordingDomainEventPublisher();
+        var service = CreateService(context, publisher);
+
+        var created = await service.CreateAsync(Request(role.Id, department.Id));
+
+        Assert.Contains(publisher.Events, evt => evt.EventType == "user-created" && evt.EventId != Guid.Empty);
+    }
+
+    [Fact]
+    public async Task UpdatePublishesUserUpdatedEvent()
+    {
+        await using var context = CreateContext();
+        var (role, department) = SeedReferences(context);
+        var publisher = new RecordingDomainEventPublisher();
+        var service = CreateService(context, publisher);
+        var created = await service.CreateAsync(Request(role.Id, department.Id));
+
+        await service.UpdateAsync(created.Id, new UpdateUserRequest
+        {
+            FullName = "Updated Person",
+            Email = "updated@example.com",
+            RoleId = role.Id,
+            DepartmentId = department.Id,
+            IsActive = true
+        });
+
+        Assert.Contains(publisher.Events, evt => evt.EventType == "user-updated" && evt.EventId != Guid.Empty);
+    }
+
+    [Fact]
     public async Task DeleteSoftDeletesAndMissingIdsThrow()
     {
         await using var context = CreateContext();
@@ -127,9 +162,28 @@ public class UserServiceTests
         return (role, department);
     }
 
-    private static UserService CreateService(IdentityDbContext context)
-        => new(context, new MapperConfiguration(configuration => configuration.AddProfile<MappingProfile>()).CreateMapper());
+    private static UserService CreateService(IdentityDbContext context, IDomainEventPublisher? publisher = null)
+        => new(
+            context,
+            new MapperConfiguration(configuration => configuration.AddProfile<MappingProfile>()).CreateMapper(),
+            publisher: publisher);
 
     private static CreateUserRequest Request(Guid roleId, Guid departmentId)
         => new() { FullName = "Person", Email = "PERSON@example.com", RoleId = roleId, DepartmentId = departmentId };
+
+    private sealed class RecordingDomainEventPublisher : IDomainEventPublisher
+    {
+        public List<RecordedEvent> Events { get; } = new();
+
+        public Task PublishAsync<T>(
+            string topic,
+            SecurityEvent<T> message,
+            CancellationToken cancellationToken = default)
+        {
+            Events.Add(new RecordedEvent(topic, message.EventType, message.EventId));
+            return Task.CompletedTask;
+        }
+
+        public sealed record RecordedEvent(string Topic, string EventType, Guid EventId);
+    }
 }
