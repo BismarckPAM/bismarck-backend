@@ -309,8 +309,8 @@ services:
 
   gateway_svc:
     build:
-      context: ./gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: gateway/Dockerfile
 
     container_name: gateway_svc
 
