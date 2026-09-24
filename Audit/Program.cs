@@ -1,4 +1,5 @@
 using System.Text;
+using Prometheus;
 using Audit.Service.Data;
 using Audit.Service.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -44,6 +45,7 @@ builder.Services.AddHostedService<KafkaAuditConsumer>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+app.UseHttpMetrics();
 
 if (app.Environment.IsDevelopment())
 {
@@ -56,5 +58,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
+app.MapMetrics();
 app.Run();
