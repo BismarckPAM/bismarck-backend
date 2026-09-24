@@ -1,4 +1,5 @@
 using Gateway.Service.Middleware;
+using Prometheus;
 using Yarp.ReverseProxy;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -41,6 +42,7 @@ builder.Services.AddReverseProxy()
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+app.UseHttpMetrics();
 
 // Order matters: CORS must run before the proxy so preflights and cross-origin
 // responses are handled, then the gateway's own auth-header gate, then YARP.
@@ -48,5 +50,5 @@ app.UseCors("Frontend");
 app.UseMiddleware<AuthorizationHeaderValidatorMiddleware>();
 app.MapHealthChecks("/health");
 app.MapReverseProxy();
-
+app.MapMetrics();
 app.Run();
