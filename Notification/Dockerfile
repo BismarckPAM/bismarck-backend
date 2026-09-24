@@ -1,12 +1,17 @@
-# Multi-stage build: restore -> build -> publish -> minimal runtime image.
-# The runtime image is aspnet (not the full SDK), matching the other services.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
 WORKDIR /src
-COPY Notification.Service.csproj .
-RUN dotnet restore "Notification.Service.csproj"
+
+# 1. Copy project files preserving relative paths
+COPY notification/Notification.Service.csproj notification/
+COPY BuildingBlocks/Messaging/Messaging.csproj BuildingBlocks/Messaging/
+RUN dotnet restore "notification/Notification.Service.csproj"
 
 FROM restore AS build
-COPY . .
+# 2. Copy source codes preserving relative paths
+COPY notification/ notification/
+COPY BuildingBlocks/Messaging/ BuildingBlocks/Messaging/
+
+WORKDIR /src/notification
 RUN dotnet build "Notification.Service.csproj" --no-restore --configuration Release --output /app/build
 
 FROM build AS publish
