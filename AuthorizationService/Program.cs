@@ -5,6 +5,7 @@ using AuthorizationService.Services;
 using Microsoft.EntityFrameworkCore;
 using Polly;
 using Polly.Extensions.Http;
+using Prometheus;
 using Serilog;
 using System.Text.Json.Serialization;
 
@@ -80,6 +81,7 @@ builder.Services.AddHostedService<ApprovalGrantedConsumer>();
 builder.Services.AddHostedService<TemporaryPermissionExpirationWorker>();
 
 var app = builder.Build();
+app.UseHttpMetrics();
 
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Environment.IsEnvironment("Testing"))
 {
@@ -97,7 +99,7 @@ if (!string.Equals(
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 app.MapHealthChecks("/health");
 app.MapControllers();
-
+app.MapMetrics();
 app.Run();
 
 public partial class Program { }
