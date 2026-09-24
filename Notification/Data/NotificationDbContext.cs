@@ -5,14 +5,18 @@ namespace Notification.Service.Data;
 
 public class NotificationDbContext(DbContextOptions<NotificationDbContext> options) : DbContext(options)
 {
-    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationLog> Notifications => Set<NotificationLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Notification>(entity =>
+        modelBuilder.Entity<NotificationLog>(entity =>
         {
+
+            // Maps cleanly to table 'Notifications' without any namespace ambiguity
+            entity.ToTable("Notifications");
+
             entity.HasKey(e => e.Id);
 
             // Unique index to prevent duplicate notifications 

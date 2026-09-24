@@ -1,10 +1,10 @@
 namespace Notification.Service.Models;
 
-public sealed class Notification
+public sealed class NotificationLog
 {
     public Guid Id { get; set; }
     public Guid EventId { get; set; }
-    public Guid UserId { get; set; } = string.Empty; 
+    public Guid UserId { get; set; } 
     public string EventType { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
