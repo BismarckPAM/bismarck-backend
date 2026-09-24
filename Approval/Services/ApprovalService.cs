@@ -14,7 +14,8 @@ public sealed class ApprovalService(
 	IDomainEventPublisher domainEventPublisher) : IApproverAuthorizationService
 {
 	public async Task<ApprovalRequestResponse> CreateAsync(
-		CreateApprovalRequestRequest request)
+		CreateApprovalRequestRequest request,
+		CancellationToken cancellationToken = default)
 	{
 		var requesterUserId = GetCurrentUserId();
 		var approvalRequest = new ApprovalRequest
@@ -29,7 +30,27 @@ public sealed class ApprovalService(
 		};
 
 		dbContext.ApprovalRequests.Add(approvalRequest);
-		await dbContext.SaveChangesAsync();
+		await dbContext.SaveChangesAsync(cancellationToken);
+
+		await domainEventPublisher.PublishAsync(
+			KafkaTopics.ApprovalRequested,
+			new SecurityEvent<object>(
+				Guid.NewGuid(),
+				"ApprovalRequested",
+				DateTimeOffset.UtcNow,
+				requesterUserId,
+				approvalRequest.ResourceId,
+				"ELEVATED_ACCESS",
+				"REQUESTED",
+				new
+				{
+					ApprovalId = approvalRequest.Id,
+					RequesterUserId = approvalRequest.RequesterUserId,
+					approvalRequest.RequestedLevel,
+					approvalRequest.DurationMinutes,
+					approvalRequest.Reason
+				}),
+			cancellationToken);
 
 		return ToResponse(approvalRequest);
 	}
@@ -82,7 +103,10 @@ public sealed class ApprovalService(
         return approvedRequest;
     }
 
-	public async Task<ApprovalRequestResponse> RejectAsync(Guid id, string reason)
+	public async Task<ApprovalRequestResponse> RejectAsync(
+		Guid id,
+		string reason,
+		CancellationToken cancellationToken = default)
 	{
 		var reviewerUserId = GetCurrentUserId();
 		var reviewedAt = DateTime.UtcNow;
@@ -92,12 +116,34 @@ public sealed class ApprovalService(
 				.SetProperty(item => item.Status, ApprovalStatus.REJECTED)
 				.SetProperty(item => item.ReviewedAt, reviewedAt)
 				.SetProperty(item => item.ReviewedByUserId, reviewerUserId)
-				.SetProperty(item => item.RejectionReason, reason));
+				.SetProperty(item => item.RejectionReason, reason),
+				cancellationToken);
 
 		if (updatedRows == 0)
 			throw await GetActionFailureAsync(id);
 
-		return await GetByIdAsync(id);
+		var rejectedRequest = await GetByIdAsync(id);
+		await domainEventPublisher.PublishAsync(
+			KafkaTopics.ApprovalRejected,
+			new SecurityEvent<object>(
+				Guid.NewGuid(),
+				"ApprovalRejected",
+				DateTimeOffset.UtcNow,
+				reviewerUserId,
+				rejectedRequest.ResourceId,
+				"ELEVATED_ACCESS",
+				"REJECTED",
+				new
+				{
+					ApprovalId = rejectedRequest.Id,
+					RequesterUserId = rejectedRequest.RequesterUserId,
+					RejectionReason = rejectedRequest.RejectionReason,
+					ReviewedByUserId = rejectedRequest.ReviewedByUserId,
+					ReviewedAt = rejectedRequest.ReviewedAt
+				}),
+			cancellationToken);
+
+		return rejectedRequest;
 	}
 
 	public async Task<IEnumerable<ApprovalRequestResponse>> GetPendingAsync()
