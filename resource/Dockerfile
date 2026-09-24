@@ -6,9 +6,17 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Resource.Service.csproj", "./"]
-RUN dotnet restore "Resource.Service.csproj"
-COPY . .
+
+# 1. Copy csproj files preserving relative paths for project references
+COPY resource/Resource.Service.csproj resource/
+COPY BuildingBlocks/Messaging/Messaging.csproj BuildingBlocks/Messaging/
+RUN dotnet restore "resource/Resource.Service.csproj"
+
+# 2. Copy source codes
+COPY resource/ resource/
+COPY BuildingBlocks/Messaging/ BuildingBlocks/Messaging/
+
+WORKDIR /src/resource
 RUN dotnet build "Resource.Service.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish

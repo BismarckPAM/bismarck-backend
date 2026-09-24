@@ -2,11 +2,18 @@
 # The runtime image is aspnet (not the full SDK), matching the other services.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
 WORKDIR /src
-COPY Audit.Service.csproj .
-RUN dotnet restore "Audit.Service.csproj"
+
+# 1. Copy project files preserving folder structure for relative project references
+COPY Audit/Audit.Service.csproj Audit/
+COPY BuildingBlocks/Messaging/Messaging.csproj BuildingBlocks/Messaging/
+RUN dotnet restore "Audit/Audit.Service.csproj"
 
 FROM restore AS build
-COPY . .
+# 2. Copy source codes
+COPY Audit/ Audit/
+COPY BuildingBlocks/Messaging/ BuildingBlocks/Messaging/
+
+WORKDIR /src/Audit
 RUN dotnet build "Audit.Service.csproj" --no-restore --configuration Release --output /app/build
 
 FROM build AS publish

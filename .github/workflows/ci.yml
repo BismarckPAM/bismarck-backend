@@ -28,6 +28,9 @@ jobs:
           - identity
           - resource
           - AuthorizationService
+          - Approval
+          - Audit
+          - Notification
           - gateway
 
     steps:
@@ -128,6 +131,41 @@ jobs:
 
 
       # ========================================================
+      # Approval Tests
+      # ========================================================
+
+      - name: Run Approval Unit Tests
+        if: matrix.service == 'Approval'
+        run: |
+          dotnet test \
+            ./Approval/Approval.Service.Tests/Approval.Service.Tests.csproj \
+            --configuration Release \
+            --verbosity normal
+
+
+      - name: Run Approval Integration Tests
+        if: matrix.service == 'Approval'
+        run: |
+          dotnet test \
+            ./Approval/Approval.Service.IntegrationTests/Approval.Service.IntegrationTests.csproj \
+            --configuration Release \
+            --verbosity normal
+
+
+      # ========================================================
+      # Notification Tests
+      # ========================================================
+
+      - name: Run Notification Unit Tests
+        if: matrix.service == 'Notification'
+        run: |
+          dotnet test \
+            ./Notification/Notification.Service.Tests/Notification.Service.Tests.csproj \
+            --configuration Release \
+            --verbosity normal
+
+
+      # ========================================================
       # Gateway
       #
       # Gateway currently has no test project.
@@ -185,10 +223,16 @@ jobs:
           IDENTITY_DB_NAME=identity_db
           RESOURCE_DB_NAME=resource_db
           AUTHORIZATION_DB_NAME=authorization_db
+          APPROVAL_DB_NAME=approval_db
+          AUDIT_DB_NAME=audit_db
+          NOTIFICATION_DB_NAME=notification_db
 
           IDENTITY_DB_PORT=5433
           RESOURCE_DB_PORT=5434
           AUTHORIZATION_DB_PORT=5435
+          APPROVAL_DB_PORT=5436
+          AUDIT_DB_PORT=5437
+          NOTIFICATION_DB_PORT=5438
 
           GATEWAY_PORT=8080
 
@@ -208,10 +252,8 @@ jobs:
       # --------------------------------------------------------
       # Build Docker Compose Services
       #
-      # identity_svc
-      # resource_svc
-      # authorization_svc
-      # gateway_svc
+      # identity_svc, resource_svc, authorization_svc,
+      # approval_svc, audit_svc, notification_svc, gateway_svc
       #
       # PostgreSQL images are pulled from Docker Hub.
       # --------------------------------------------------------
@@ -268,6 +310,15 @@ jobs:
           - service: AuthorizationService
             image_name: authorization_svc
 
+          - service: Approval
+            image_name: approval_svc
+
+          - service: Audit
+            image_name: audit_svc
+          
+          - service: Notification
+            image_name: notification_svc
+
           - service: gateway
             image_name: gateway_svc
 
@@ -309,7 +360,7 @@ jobs:
       - name: Build and Push Image
         uses: docker/build-push-action@v6
         with:
-          context: ./${{ matrix.service }}
+          context: .
           file: ./${{ matrix.service }}/Dockerfile
 
           push: true
