@@ -4,12 +4,17 @@ namespace Approval.Service.Services;
 
 public interface IApproverAuthorizationService
 {
-    Task<ApprovalRequestResponse> CreateAsync(CreateApprovalRequestRequest request);
+    Task<ApprovalRequestResponse> CreateAsync(
+        CreateApprovalRequestRequest request,
+        CancellationToken cancellationToken = default);
     Task<IEnumerable<ApprovalRequestResponse>> GetPendingAsync();
     Task<ApprovalRequestResponse> ApproveAsync(
         Guid id,
         CancellationToken cancellationToken = default);
-    Task<ApprovalRequestResponse> RejectAsync(Guid id, string reason);
+    Task<ApprovalRequestResponse> RejectAsync(
+        Guid id,
+        string reason,
+        CancellationToken cancellationToken = default);
     Task<IEnumerable<ApprovalRequestResponse>> GetAllAsync();
     Task<ApprovalRequestResponse> GetByIdAsync(Guid id);
     Task<ApprovalRequestResponse> UpdateAsync(Guid id, UpdateApprovalRequestRequest request);
