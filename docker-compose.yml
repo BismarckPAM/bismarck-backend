@@ -45,8 +45,8 @@ services:
 
   identity_svc:
     build:
-      context: ./identity
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: identity/Dockerfile
 
     container_name: identity_svc
 
@@ -92,8 +92,8 @@ services:
 
   resource_svc:
     build:
-      context: ./resource
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: resource/Dockerfile
 
     container_name: resource_svc
 
@@ -138,8 +138,8 @@ services:
 
   authorization_svc:
     build:
-      context: ./AuthorizationService
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: AuthorizationService/Dockerfile
 
     container_name: authorization_svc
 
@@ -186,8 +186,8 @@ services:
 
   approval_svc:
     build:
-      context: ./Approval
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Approval/Dockerfile
 
     container_name: approval_svc
 
@@ -235,8 +235,8 @@ services:
 
   audit_svc:
     build:
-      context: ./Audit
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Audit/Dockerfile
 
     container_name: audit_svc
 
@@ -256,13 +256,61 @@ services:
 
 
   # ============================================================
+  # Notification Services
+  # ============================================================
+
+  notification-db:
+    image: postgres:latest
+    container_name: notification-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME}
+
+    ports:
+      - "${NOTIFICATION_DB_PORT}:5432"
+
+    volumes:
+      - notification_data:/var/lib/postgresql/data
+
+
+
+  notification_svc:
+    build:
+      context: .
+      dockerfile: Notification/Dockerfile
+    container_name: notification_svc
+
+    # No host port mapping.
+    # The API Gateway is the only external entry point.
+    # Internal URL:
+    # http://notification_svc:8080
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      ConnectionStrings__DefaultConnection: >-
+        Host=notification-db;
+        Database=${NOTIFICATION_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
+      Kafka__GroupId: bismarck-notification-service
+
+    depends_on:
+      - notification-db
+      - kafka
+
+
+  # ============================================================
   # API Gateway
   # ============================================================
 
   gateway_svc:
     build:
-      context: ./gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: gateway/Dockerfile
 
     container_name: gateway_svc
 
@@ -279,6 +327,8 @@ services:
       Services__Resource__Url: http://resource_svc:8080
       Services__Authorization__Url: http://authorization_svc:8080
       Services__Approval__Url: http://approval_svc:8080
+      Services__Audit__Url: http://audit_svc:8080
+      Services__Notification__Url: http://notification_svc:8080
 
       # Frontend origin(s) accepted by the gateway CORS policy.
       AllowedOrigins__0: ${ALLOWED_ORIGINS}
@@ -288,6 +338,7 @@ services:
       - resource_svc
       - authorization_svc
       - approval_svc
+      - notification_svc
       - audit_svc
 
 
@@ -302,3 +353,4 @@ volumes:
   authorization_data:
   approval_data:
   audit_data:
+  notification_data:
