@@ -1,6 +1,29 @@
 services:
 
   # ============================================================
+  # Kafka-compatible event broker
+  # ============================================================
+
+  kafka:
+    image: redpandadata/redpanda:v24.3.5
+    container_name: kafka
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --check=false
+      - --node-id=0
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://kafka:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+    volumes:
+      - kafka_data:/var/lib/redpanda/data
+
+  # ============================================================
   # Identity Services
   # ============================================================
 
@@ -40,9 +63,11 @@ services:
         Database=${IDENTITY_DB_NAME};
         Username=${DB_USER};
         Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
 
     depends_on:
       - identity-db
+      - kafka
 
 
   # ============================================================
@@ -84,9 +109,11 @@ services:
         Database=${RESOURCE_DB_NAME};
         Username=${DB_USER};
         Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
 
     depends_on:
       - resource-db
+      - kafka
 
 
   # ============================================================
@@ -128,11 +155,153 @@ services:
         Database=${AUTHORIZATION_DB_NAME};
         Username=${DB_USER};
         Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
 
     depends_on:
       - authorization-db
       - identity_svc
       - resource_svc
+      - kafka
+
+
+  # ============================================================
+  # Approval Services
+  # ============================================================
+
+  approval-db:
+    image: postgres:latest
+    container_name: approval-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${APPROVAL_DB_NAME}
+
+    ports:
+      - "${APPROVAL_DB_PORT}:5432"
+
+    volumes:
+      - approval_data:/var/lib/postgresql/data
+
+
+  approval_svc:
+    build:
+      context: ./Approval
+      dockerfile: Dockerfile
+
+    container_name: approval_svc
+
+    # No host port mapping.
+    # Internal URL:
+    # http://approval_svc:8080
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      ConnectionStrings__DefaultConnection: >-
+        Host=approval-db;
+        Database=${APPROVAL_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
+
+    depends_on:
+      - authorization-db
+      - identity_svc
+      - resource_svc
+      - approval-db
+      - kafka
+
+
+  # ============================================================
+  # Audit Services
+  # ============================================================
+
+  audit-db:
+    image: postgres:latest
+    container_name: audit-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${AUDIT_DB_NAME}
+
+    ports:
+      - "${AUDIT_DB_PORT}:5432"
+
+    volumes:
+      - audit_data:/var/lib/postgresql/data
+
+
+  audit_svc:
+    build:
+      context: ./Audit
+      dockerfile: Dockerfile
+
+    container_name: audit_svc
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__AuditDatabase: >-
+        Host=audit-db;
+        Database=${AUDIT_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
+      Kafka__GroupId: bismarck-audit-service
+
+    depends_on:
+      - audit-db
+      - kafka
+
+
+  # ============================================================
+  # Notification Services
+  # ============================================================
+
+  notification-db:
+    image: postgres:latest
+    container_name: notification-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME}
+
+    ports:
+      - "${NOTIFICATION_DB_PORT}:5432"
+
+    volumes:
+      - notification_data:/var/lib/postgresql/data
+
+
+
+  notification_svc:
+    build:
+      context: ./Notification
+      dockerfile: Dockerfile
+
+    container_name: notification_svc
+
+    # No host port mapping.
+    # The API Gateway is the only external entry point.
+    # Internal URL:
+    # http://notification_svc:8080
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      ConnectionStrings__DefaultConnection: >-
+        Host=notification-db;
+        Database=${NOTIFICATION_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
+      Kafka__GroupId: bismarck-notification-service
+
+    depends_on:
+      - notification-db
+      - kafka
 
 
   # ============================================================
@@ -158,6 +327,9 @@ services:
       Services__Identity__Url: http://identity_svc:8080
       Services__Resource__Url: http://resource_svc:8080
       Services__Authorization__Url: http://authorization_svc:8080
+      Services__Approval__Url: http://approval_svc:8080
+      Services__Audit__Url: http://audit_svc:8080
+      Services__Notification__Url: http://notification_svc:8080
 
       # Frontend origin(s) accepted by the gateway CORS policy.
       AllowedOrigins__0: ${ALLOWED_ORIGINS}
@@ -166,6 +338,9 @@ services:
       - identity_svc
       - resource_svc
       - authorization_svc
+      - approval_svc
+      - notification_svc
+      - audit_svc
 
 
 # ============================================================
@@ -173,6 +348,10 @@ services:
 # ============================================================
 
 volumes:
+  kafka_data:
   identity_data:
   resource_data:
   authorization_data:
+  approval_data:
+  audit_data:
+  notification_data:
