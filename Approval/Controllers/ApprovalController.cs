@@ -11,9 +11,11 @@ namespace Approval.Service.Controllers;
 public class ApprovalController(IApproverAuthorizationService approverAuthorizationService) : ControllerBase
 {
     [HttpPost]
-    public async Task<ActionResult<ApprovalRequestResponse>> Create(CreateApprovalRequestRequest request)
+    public async Task<ActionResult<ApprovalRequestResponse>> Create(
+        CreateApprovalRequestRequest request,
+        CancellationToken cancellationToken)
     {
-        var approvalRequest = await approverAuthorizationService.CreateAsync(request);
+        var approvalRequest = await approverAuthorizationService.CreateAsync(request, cancellationToken);
 
         return CreatedAtAction(nameof(GetById), new { id = approvalRequest.Id }, approvalRequest);
     }
@@ -57,14 +59,15 @@ public class ApprovalController(IApproverAuthorizationService approverAuthorizat
     [HttpPost("{id}/reject")]
     public async Task<ActionResult<ApprovalRequestResponse>> Reject(
         Guid id,
-        RejectApprovalRequest request)
+        RejectApprovalRequest request,
+        CancellationToken cancellationToken)
     {
         if (!approverAuthorizationService.IsApprover())
             return Forbid();
 
         try
         {
-            return Ok(await approverAuthorizationService.RejectAsync(id, request.Reason));
+            return Ok(await approverAuthorizationService.RejectAsync(id, request.Reason, cancellationToken));
         }
         catch (KeyNotFoundException)
         {
