@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Resource.Service.Data;
+using Resource.Service.Services;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -57,6 +58,18 @@ public class ResourceApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
             services.AddDbContext<ResourceDbContext>(options =>
                 options.UseNpgsql(_dbContainer.GetConnectionString()));
+
+            // Replace the production Kafka publisher with a no-op. Integration
+            // tests run without a Kafka broker; the real KafkaDomainEventPublisher
+            // blocks on an unreachable broker and would hang resource mutations.
+            var publisherDescriptor = services.SingleOrDefault(
+                d => d.ServiceType == typeof(IDomainEventPublisher));
+            if (publisherDescriptor != null)
+            {
+                services.Remove(publisherDescriptor);
+            }
+
+            services.AddSingleton<IDomainEventPublisher, NullDomainEventPublisher>();
         });
     }
 

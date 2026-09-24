@@ -1,5 +1,6 @@
 using Identity.Service.Data;
 using Identity.Service.Models;
+using Identity.Service.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +39,19 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
             var descriptor = services.Single(service => service.ServiceType == typeof(DbContextOptions<IdentityDbContext>));
             services.Remove(descriptor);
             services.AddDbContext<IdentityDbContext>(options => options.UseNpgsql(database.GetConnectionString()));
+
+            // Replace the production Kafka publisher with a no-op. Integration
+            // tests run without a Kafka broker; the real KafkaDomainEventPublisher
+            // blocks on an unreachable broker and previously hung the test run
+            // (TaskCanceledException after the HTTP request timed out).
+            var publisherDescriptor = services.SingleOrDefault(
+                service => service.ServiceType == typeof(IDomainEventPublisher));
+            if (publisherDescriptor is not null)
+            {
+                services.Remove(publisherDescriptor);
+            }
+
+            services.AddSingleton<IDomainEventPublisher, NullDomainEventPublisher>();
         });
     }
 
