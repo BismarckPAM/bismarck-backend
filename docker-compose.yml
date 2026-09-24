@@ -255,7 +255,7 @@ services:
       - kafka
 
 
-# ============================================================
+  # ============================================================
   # Notification Services
   # ============================================================
 
@@ -278,7 +278,7 @@ services:
 
   notification_svc:
     build:
-      context: ./notification
+      context: ./Notification
       dockerfile: Dockerfile
 
     container_name: notification_svc
@@ -328,6 +328,8 @@ services:
       Services__Resource__Url: http://resource_svc:8080
       Services__Authorization__Url: http://authorization_svc:8080
       Services__Approval__Url: http://approval_svc:8080
+      Services__Audit__Url: http://audit_svc:8080
+      Services__Notification__Url: http://notification_svc:8080
 
       # Frontend origin(s) accepted by the gateway CORS policy.
       AllowedOrigins__0: ${ALLOWED_ORIGINS}
