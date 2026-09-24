@@ -19,10 +19,12 @@ builder.Services.AddDbContext<NotificationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 
-// JWT Authentication & Authorization
-var jwtKey = builder.Configuration["Jwt:Key"] 
-    ?? builder.Configuration["Jwt:Secret"] 
-    ?? throw new InvalidOperationException("JWT Secret Key is not configured.");
+// JWT Authentication & Authorization must match Identity's token contract.
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var jwtKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY")
+    ?? jwtSettings["SigningKey"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+    throw new InvalidOperationException("JWT_SIGNING_KEY environment variable is required.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -33,8 +35,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidIssuer = jwtSettings["Issuer"],
+            ValidAudience = jwtSettings["Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ClockSkew = TimeSpan.Zero // Optional: removes the default 5-minute clock drift grace period
         };
