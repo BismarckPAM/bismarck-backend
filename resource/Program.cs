@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Prometheus;
 using Resource.Service.Data;
 using Resource.Service.Filters;
 using Resource.Service.Mappings;
@@ -99,6 +100,7 @@ builder.Services.AddScoped<IResourceService, ResourceService>();
 builder.Services.AddSingleton<IDomainEventPublisher, KafkaDomainEventPublisher>();
 
 var app = builder.Build();
+app.UseHttpMetrics();
 
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 
@@ -121,7 +123,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
+app.MapMetrics();
 app.Run();
 
 public partial class Program { }
