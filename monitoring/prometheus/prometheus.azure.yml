@@ -1,0 +1,311 @@
+# ============================================================
+# Bismarck PAM - Azure Prometheus Configuration
+# Story: BIS-308
+#
+# Purpose:
+#   Prometheus configuration for the Azure deployment.
+#
+# Architecture:
+#
+#   Azure Container Apps
+#       |
+#       | HTTPS /metrics
+#       v
+#   Prometheus - Azure VM
+#       |
+#       +--> Kafka Exporter
+#                 |
+#                 v
+#              Redpanda
+#
+#   Grafana reads metrics from Prometheus.
+#
+# IMPORTANT:
+#   Replace all <...> placeholders with the real Azure
+#   Container App FQDNs before deployment.
+#
+#   Do NOT include https:// inside the target value.
+#
+# Example:
+#
+#   Correct:
+#     identity-svc.example.azurecontainerapps.io
+#
+#   Incorrect:
+#     https://identity-svc.example.azurecontainerapps.io
+# ============================================================
+
+
+global:
+
+  # How frequently Prometheus collects metrics from targets.
+  scrape_interval: 15s
+
+  # Maximum amount of time allowed for one scrape.
+  scrape_timeout: 10s
+
+  # Used mainly for Prometheus alerting/rule evaluation.
+  evaluation_interval: 15s
+
+
+
+# ============================================================
+# SCRAPE TARGETS
+# ============================================================
+
+scrape_configs:
+
+
+  # ----------------------------------------------------------
+  # Prometheus
+  # ----------------------------------------------------------
+  #
+  # Prometheus monitors itself.
+  #
+  # Because this configuration runs inside the Prometheus
+  # container, localhost:9090 refers to Prometheus itself.
+  # ----------------------------------------------------------
+
+  - job_name: "prometheus"
+
+    metrics_path: /metrics
+
+    scheme: http
+
+    static_configs:
+
+      - targets:
+          - "localhost:9090"
+
+        labels:
+          service: "prometheus"
+          environment: "azure"
+
+
+
+  # ----------------------------------------------------------
+  # Identity Service
+  # ----------------------------------------------------------
+
+  - job_name: "identity-service"
+
+    scheme: https
+
+    metrics_path: /metrics
+
+    static_configs:
+
+      - targets:
+
+          # Replace with the Identity Azure Container App FQDN.
+          #
+          # Example:
+          # identity-svc.<environment>.<region>.azurecontainerapps.io
+
+          - "<IDENTITY_CONTAINER_APP_FQDN>"
+
+        labels:
+
+          service: "identity"
+
+          environment: "azure"
+
+
+
+  # ----------------------------------------------------------
+  # Resource Service
+  # ----------------------------------------------------------
+
+  - job_name: "resource-service"
+
+    scheme: https
+
+    metrics_path: /metrics
+
+    static_configs:
+
+      - targets:
+
+          # Replace with the Resource service Azure FQDN.
+
+          - "<RESOURCE_CONTAINER_APP_FQDN>"
+
+        labels:
+
+          service: "resource"
+
+          environment: "azure"
+
+
+
+  # ----------------------------------------------------------
+  # Authorization Service
+  # ----------------------------------------------------------
+
+  - job_name: "authorization-service"
+
+    scheme: https
+
+    metrics_path: /metrics
+
+    static_configs:
+
+      - targets:
+
+          # Replace with the Authorization service Azure FQDN.
+
+          - "<AUTHORIZATION_CONTAINER_APP_FQDN>"
+
+        labels:
+
+          service: "authorization"
+
+          environment: "azure"
+
+
+
+  # ----------------------------------------------------------
+  # Approval Service
+  # ----------------------------------------------------------
+
+  - job_name: "approval-service"
+
+    scheme: https
+
+    metrics_path: /metrics
+
+    static_configs:
+
+      - targets:
+
+          # Replace with the Approval service Azure FQDN.
+
+          - "<APPROVAL_CONTAINER_APP_FQDN>"
+
+        labels:
+
+          service: "approval"
+
+          environment: "azure"
+
+
+
+  # ----------------------------------------------------------
+  # Audit Service
+  # ----------------------------------------------------------
+
+  - job_name: "audit-service"
+
+    scheme: https
+
+    metrics_path: /metrics
+
+    static_configs:
+
+      - targets:
+
+          # Replace with the Audit service Azure FQDN.
+
+          - "<AUDIT_CONTAINER_APP_FQDN>"
+
+        labels:
+
+          service: "audit"
+
+          environment: "azure"
+
+
+
+  # ----------------------------------------------------------
+  # Notification Service
+  # ----------------------------------------------------------
+
+  - job_name: "notification-service"
+
+    scheme: https
+
+    metrics_path: /metrics
+
+    static_configs:
+
+      - targets:
+
+          # Replace with the Notification service Azure FQDN.
+
+          - "<NOTIFICATION_CONTAINER_APP_FQDN>"
+
+        labels:
+
+          service: "notification"
+
+          environment: "azure"
+
+
+
+  # ----------------------------------------------------------
+  # Gateway Service
+  # ----------------------------------------------------------
+  #
+  # /metrics was already added to the Gateway PublicPaths
+  # configuration during BIS-308.
+  # ----------------------------------------------------------
+
+  - job_name: "gateway-service"
+
+    scheme: https
+
+    metrics_path: /metrics
+
+    static_configs:
+
+      - targets:
+
+          # Replace with the Gateway Azure Container App FQDN.
+
+          - "<GATEWAY_CONTAINER_APP_FQDN>"
+
+        labels:
+
+          service: "gateway"
+
+          environment: "azure"
+
+
+
+  # ----------------------------------------------------------
+  # Kafka Exporter
+  # ----------------------------------------------------------
+  #
+  # Kafka Exporter runs on the same Docker network as
+  # Prometheus on the Azure VM.
+  #
+  # Prometheus does NOT need to connect directly to Redpanda.
+  #
+  # Flow:
+  #
+  # Redpanda
+  #     |
+  #     v
+  # Kafka Exporter
+  #     |
+  #     v
+  # Prometheus
+  # ----------------------------------------------------------
+
+  - job_name: "kafka-exporter"
+
+    scheme: http
+
+    metrics_path: /metrics
+
+    static_configs:
+
+      - targets:
+
+          - "kafka-exporter:9308"
+
+        labels:
+
+          service: "kafka"
+
+          environment: "azure"
