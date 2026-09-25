@@ -3,6 +3,7 @@ using Approval.Service.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Prometheus;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -58,6 +59,10 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+app.UseRouting();
+app.UseHttpMetrics(); 
+app.MapMetrics();
 
 public partial class Program { }
 
