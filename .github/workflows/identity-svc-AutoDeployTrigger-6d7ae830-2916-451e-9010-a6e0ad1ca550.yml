@@ -7,7 +7,7 @@ on:
     branches: 
       [ deploy/production ]
     paths:
-    - '**'
+    - 'identity/**'
     - '.github/workflows/identity-svc-AutoDeployTrigger-6d7ae830-2916-451e-9010-a6e0ad1ca550.yml'
 
   # Allow manual trigger 
@@ -34,8 +34,8 @@ jobs:
       - name: Build and push container image to registry
         uses: azure/container-apps-deploy-action@v2
         with:
-          appSourcePath: ${{ github.workspace }}identity
-          _dockerfilePathKey_: _dockerfilePath_
+          appSourcePath: ${{ github.workspace }}
+          dockerfilePath: identity/Dockerfile
           _targetLabelKey_: _targetLabel_
           registryUrl: bismarckregistry.azurecr.io
           registryUsername: ${{ secrets.IDENTITYSVC_REGISTRY_USERNAME }}
