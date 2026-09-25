@@ -49,16 +49,9 @@ public class KafkaAuditConsumer : BackgroundService
         using var consumer = new ConsumerBuilder<Ignore, string>(consumerConfig).Build();
         using var deadLetterProducer = new ProducerBuilder<Null, string>(producerConfig).Build();
 
-        var topics = new[]
-        {
-            KafkaTopics.AccessRequested,
-            KafkaTopics.AccessGranted,
-            KafkaTopics.AccessDenied,
-            KafkaTopics.ApprovalRequested,
-            KafkaTopics.ApprovalGranted,
-            KafkaTopics.ApprovalRejected,
-            KafkaTopics.PermissionRevoked
-        };
+        // Subscribe to every published topic so that no event is dropped,
+        // including identity-events and resource-events.
+        var topics = KafkaTopics.All;
 
         consumer.Subscribe(topics);
         _logger.LogInformation("KafkaAuditConsumer started with GroupId '{GroupId}'. Subscribed to: {Topics}", 
