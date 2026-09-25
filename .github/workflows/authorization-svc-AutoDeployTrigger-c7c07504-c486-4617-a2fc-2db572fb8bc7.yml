@@ -1,0 +1,49 @@
+name: Trigger auto deployment for authorization-svc
+
+# When this action will be executed
+on:
+  # Automatically trigger it when detected changes in repo
+  push:
+    branches: 
+      [ deploy/production ]
+    paths:
+    - '**'
+    - '.github/workflows/authorization-svc-AutoDeployTrigger-c7c07504-c486-4617-a2fc-2db572fb8bc7.yml'
+
+  # Allow manual trigger 
+  workflow_dispatch:      
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions: 
+      id-token: write #This is required for requesting the OIDC JWT Token
+      contents: read #Required when GH token is used to authenticate with private repo
+
+    steps:
+      - name: Checkout to the branch
+        uses: actions/checkout@v2
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AUTHORIZATIONSVC_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AUTHORIZATIONSVC_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AUTHORIZATIONSVC_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push container image to registry
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}
+          _dockerfilePathKey_: _dockerfilePath_
+          _targetLabelKey_: _targetLabel_
+          registryUrl: bismarckregistry.azurecr.io
+          registryUsername: ${{ secrets.AUTHORIZATIONSVC_REGISTRY_USERNAME }}
+          registryPassword: ${{ secrets.AUTHORIZATIONSVC_REGISTRY_PASSWORD }}
+          containerAppName: authorization-svc
+          resourceGroup: bismarck-pam-rg
+          imageToBuild: bismarckregistry.azurecr.io/authorization-svc:${{ github.sha }}
+          _buildArgumentsKey_: |
+            _buildArgumentsValues_
+
+
