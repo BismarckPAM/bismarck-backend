@@ -7,7 +7,7 @@ on:
     branches: 
       [ deploy/production ]
     paths:
-      - 'approval/**'       
+      - 'Approval/**'       
       - '.github/workflows/approval-svc-AutoDeployTrigger-060ece86-d060-47ca-8921-942b30370ba5.yml'
 
   # Allow manual trigger 
@@ -36,7 +36,7 @@ jobs:
         with:
           # Use workspace root as context so Docker can resolve solution files/projects
           appSourcePath: ${{ github.workspace }}
-          dockerfilePath: approval/Dockerfile   
+          dockerfilePath: Approval/Dockerfile   
           registryUrl: bismarckregistry.azurecr.io
           registryUsername: ${{ secrets.APPROVALSVC_REGISTRY_USERNAME }}
           registryPassword: ${{ secrets.APPROVALSVC_REGISTRY_PASSWORD }}
