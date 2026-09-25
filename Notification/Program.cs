@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Notification.Service.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Prometheus;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -65,5 +66,8 @@ app.MapControllers();
 
 
 app.Run();
+app.UseRouting();
+app.UseHttpMetrics(); 
+app.MapMetrics();
 
 
