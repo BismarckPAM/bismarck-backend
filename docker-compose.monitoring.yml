@@ -1,0 +1,164 @@
+services:
+
+  # ==========================================================
+  # Kafka Exporter
+  # ==========================================================
+  #
+  # Kafka Exporter reads monitoring metrics from the existing
+  # Redpanda/Kafka broker running on the Azure VM.
+  #
+  # The broker address is supplied using an environment variable
+  # from the VM .env file.
+  #
+  # Example:
+  # KAFKA_BROKER_ADDRESS=redpanda:9092
+  #
+  # or:
+  # KAFKA_BROKER_ADDRESS=<VM_PRIVATE_IP>:9092
+  #
+  # Do not use localhost:9092 inside this container because
+  # localhost would refer to the Kafka Exporter container itself.
+  # ==========================================================
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    container_name: kafka-exporter
+
+    command:
+      - "--kafka.server=${KAFKA_BROKER_ADDRESS}"
+
+    restart: unless-stopped
+
+    networks:
+      - bismarck-monitoring
+
+
+  # ==========================================================
+  # Prometheus
+  # ==========================================================
+  #
+  # Prometheus collects:
+  #
+  # - Metrics from the Azure deployed .NET services
+  # - Kafka metrics from Kafka Exporter
+  #
+  # The Azure-specific Prometheus configuration is mounted from:
+  #
+  # monitoring/prometheus/prometheus.azure.yml
+  #
+  # Prometheus stores its time-series data in a persistent
+  # Docker volume.
+  #
+  # Port 9090 is exposed so the Prometheus UI can be accessed
+  # during the instructor demonstration.
+  # ==========================================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+
+    volumes:
+      - ./monitoring/prometheus/prometheus.azure.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+    ports:
+      - "9090:9090"
+
+    depends_on:
+      - kafka-exporter
+
+    restart: unless-stopped
+
+    networks:
+      - bismarck-monitoring
+
+
+  # ==========================================================
+  # Grafana
+  # ==========================================================
+  #
+  # Grafana visualizes the metrics stored in Prometheus.
+  #
+  # The existing datasource provisioning and dashboard files
+  # are mounted from the repository.
+  #
+  # Grafana admin credentials are loaded from environment
+  # variables in the VM .env file.
+  #
+  # Never commit the real Grafana password into GitHub.
+  #
+  # Port 3000 is exposed so Grafana can be opened remotely.
+  # ==========================================================
+
+  grafana:
+    image: grafana/grafana:13.2.2
+    container_name: grafana
+
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      - prometheus
+
+    restart: unless-stopped
+
+    networks:
+      - bismarck-monitoring
+
+
+# ============================================================
+# Persistent Docker Volumes
+# ============================================================
+#
+# Prometheus volume:
+# Stores collected monitoring data.
+#
+# Grafana volume:
+# Stores Grafana internal state and settings.
+# ============================================================
+
+volumes:
+
+  prometheus_data:
+
+  grafana_data:
+
+
+# ============================================================
+# Docker Network
+# ============================================================
+#
+# Prometheus, Grafana and Kafka Exporter communicate through
+# this private Docker network.
+#
+# Example communication:
+#
+# Grafana
+#    |
+#    v
+# prometheus:9090
+#
+# Prometheus
+#    |
+#    v
+# kafka-exporter:9308
+#
+# ============================================================
+
+networks:
+
+  bismarck-monitoring:
+    name: bismarck-monitoring
