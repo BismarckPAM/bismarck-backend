@@ -91,7 +91,12 @@ public sealed class ApprovalService(
             RequestedLevel: approvedRequest.RequestedLevel,
             DurationMinutes: approvedRequest.DurationMinutes,
             ReviewedByUserId: approvedRequest.ReviewedByUserId,
-            ReviewedAt: approvedRequest.ReviewedAt
+            ReviewedAt: approvedRequest.ReviewedAt,
+            RequesterName: approvedRequest.RequesterName,
+            RequesterEmail: approvedRequest.RequesterEmail,
+            ResourceName: approvedRequest.ResourceName,
+            ResourceType: approvedRequest.ResourceType,
+            Action: approvedRequest.Action
         );
     
         // Pass cancellationToken to Kafka publisher
