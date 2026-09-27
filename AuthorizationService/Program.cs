@@ -76,6 +76,18 @@ builder.Services
     .AddDbContextCheck<AuthorizationDbContext>("authorization-database");
 
 builder.Services.AddSingleton<ISystemClock, SystemClock>();
+
+// JIT cloud provisioning: Azure ARM when configured, otherwise a local-only
+// no-op so the end-to-end lifecycle still works in dev/CI.
+builder.Services.AddHttpClient<AzureJitProvisioner>();
+builder.Services.AddTransient<IAzureJitProvisioner>(sp =>
+{
+    var options = AzureJitOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>());
+    return options.IsConfigured
+        ? sp.GetRequiredService<AzureJitProvisioner>()
+        : new NoOpJitProvisioner(sp.GetRequiredService<ILogger<NoOpJitProvisioner>>());
+});
+
 builder.Services.AddHostedService<ApprovalGrantedConsumer>();
 builder.Services.AddHostedService<TemporaryPermissionExpirationWorker>();
 

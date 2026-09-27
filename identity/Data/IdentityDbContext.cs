@@ -8,6 +8,7 @@ public class IdentityDbContext(DbContextOptions<IdentityDbContext> options) : Db
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Department> Departments => Set<Department>();
+    public DbSet<OnboardingTicket> OnboardingTickets => Set<OnboardingTicket>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +42,21 @@ public class IdentityDbContext(DbContextOptions<IdentityDbContext> options) : Db
         {
             entity.HasKey(department => department.Id);
             entity.Property(department => department.Name).HasMaxLength(150).IsRequired();
+        });
+
+        modelBuilder.Entity<OnboardingTicket>(entity =>
+        {
+            entity.HasKey(ticket => ticket.Id);
+            entity.Property(ticket => ticket.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(ticket => ticket.Email).HasMaxLength(320).IsRequired();
+            entity.Property(ticket => ticket.Department).HasMaxLength(150).IsRequired();
+            entity.Property(ticket => ticket.RequestedRole).HasMaxLength(100).IsRequired();
+            entity.Property(ticket => ticket.Justification).HasMaxLength(2000).IsRequired();
+            entity.Property(ticket => ticket.Status).HasMaxLength(20).IsRequired();
+            entity.Property(ticket => ticket.ReviewedBy).HasMaxLength(320);
+            entity.Property(ticket => ticket.RejectionReason).HasMaxLength(1000);
+            entity.HasIndex(ticket => ticket.Email);
+            entity.HasIndex(ticket => ticket.Status);
         });
     }
 }
