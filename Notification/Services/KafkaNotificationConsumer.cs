@@ -49,6 +49,12 @@ public class KafkaNotificationConsumer : BackgroundService
         using var consumer = new ConsumerBuilder<Ignore, string>(consumerConfig).Build();
         using var deadLetterProducer = new ProducerBuilder<Null, string>(producerConfig).Build();
 
+        // identity-events are per-user (the affected user is the actor) so they
+        // generate user notifications. resource-events are intentionally NOT
+        // subscribed: their actor is a team name, not a user, so there is no
+        // per-user recipient and they would only fill the dead-letter topic.
+        // Audit (which records history rather than per-user messages) does
+        // subscribe to resource-events.
         var topics = new[]
         {
             KafkaTopics.AccessRequested,
@@ -57,7 +63,8 @@ public class KafkaNotificationConsumer : BackgroundService
             KafkaTopics.ApprovalRequested,
             KafkaTopics.ApprovalGranted,
             KafkaTopics.ApprovalRejected,
-            KafkaTopics.PermissionRevoked
+            KafkaTopics.PermissionRevoked,
+            KafkaTopics.IdentityEvents
         };
 
         consumer.Subscribe(topics);
@@ -246,6 +253,9 @@ public class KafkaNotificationConsumer : BackgroundService
             // Permission revoked: explicitly targets the affected user
             KafkaTopics.PermissionRevoked => metadataUserId ?? secEvent.Actor,
 
+            // Identity events: the affected user is the actor (their GUID)
+            KafkaTopics.IdentityEvents    => metadataUserId ?? secEvent.Actor,
+
             _ => metadataUserId ?? secEvent.Actor
         };
     }
@@ -287,6 +297,21 @@ public class KafkaNotificationConsumer : BackgroundService
                 "Permission Revoked",
                 $"Your permissions for {resource} have been revoked."
             ),
+            KafkaTopics.IdentityEvents => secEvent.EventType switch
+            {
+                "user-created" => (
+                    "Account Created",
+                    "Your account has been created."
+                ),
+                "user-updated" => (
+                    "Account Updated",
+                    "Your account details have been updated."
+                ),
+                _ => (
+                    "Account Update",
+                    $"An account event '{secEvent.EventType}' occurred."
+                )
+            },
             _ => (
                 secEvent.EventType,
                 $"Event {secEvent.Action} occurred on {resource} with outcome '{secEvent.Outcome}'."
