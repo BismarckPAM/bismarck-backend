@@ -41,6 +41,24 @@ public class ApprovalDbContext(DbContextOptions<ApprovalDbContext> options) : Db
 
             entity.Property(e => e.ReviewedByUserId)
                 .HasMaxLength(100);
+
+            // Best-effort, human-readable enrichment labels. Optional by
+            // design: a missing identity/resource lookup must never block a
+            // request, so these columns are nullable.
+            entity.Property(e => e.RequesterName)
+                .HasMaxLength(200);
+
+            entity.Property(e => e.RequesterEmail)
+                .HasMaxLength(320);
+
+            entity.Property(e => e.ResourceName)
+                .HasMaxLength(200);
+
+            entity.Property(e => e.ResourceType)
+                .HasMaxLength(100);
+
+            entity.Property(e => e.Action)
+                .HasMaxLength(100);
         });
     }
 }
