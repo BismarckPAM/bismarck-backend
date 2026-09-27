@@ -64,6 +64,7 @@ public class KafkaNotificationConsumer : BackgroundService
             KafkaTopics.ApprovalGranted,
             KafkaTopics.ApprovalRejected,
             KafkaTopics.PermissionRevoked,
+            KafkaTopics.JitRevoked,
             KafkaTopics.IdentityEvents
         };
 
@@ -252,6 +253,9 @@ public class KafkaNotificationConsumer : BackgroundService
 
             // Permission revoked: explicitly targets the affected user
             KafkaTopics.PermissionRevoked => metadataUserId ?? secEvent.Actor,
+
+            // JIT revoked: explicitly targets the affected user
+            KafkaTopics.JitRevoked => metadataUserId ?? secEvent.Actor,
 
             // Identity events: the affected user is the actor (their GUID)
             KafkaTopics.IdentityEvents    => metadataUserId ?? secEvent.Actor,
