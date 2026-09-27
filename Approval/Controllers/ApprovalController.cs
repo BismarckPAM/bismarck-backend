@@ -29,6 +29,14 @@ public class ApprovalController(IApproverAuthorizationService approverAuthorizat
         return Ok(await approverAuthorizationService.GetPendingAsync());
     }
 
+    // The authenticated user's own request history + aggregate counters,
+    // served from the database so it is identical across browsers/sessions.
+    [HttpGet("me")]
+    public async Task<ActionResult<MyRequestsResponse>> GetMyRequests(CancellationToken cancellationToken)
+    {
+        return Ok(await approverAuthorizationService.GetMyRequestsAsync(cancellationToken));
+    }
+
     [HttpPost("{id}/approve")]
         public async Task<ActionResult<ApprovalRequestResponse>> Approve(
             Guid id, 
