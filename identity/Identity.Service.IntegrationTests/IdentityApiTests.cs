@@ -46,6 +46,37 @@ public class IdentityApiTests(IdentityApiFixture fixture) : IClassFixture<Identi
     }
 
     [Fact]
+    public async Task LoginWithMalformedEmailReturnsBadRequest()
+    {
+        var response = await client.PostAsJsonAsync("/api/identity/auth/login", new LoginRequest
+        {
+            Email = "notanemail", Password = "Password123!"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task LoginPreflightAllowsConfiguredOriginAndRejectsOtherOrigins()
+    {
+        using var allowedRequest = new HttpRequestMessage(HttpMethod.Options, "/api/identity/auth/login");
+        allowedRequest.Headers.Add("Origin", "http://localhost:5173");
+        allowedRequest.Headers.Add("Access-Control-Request-Method", "POST");
+
+        var allowedResponse = await client.SendAsync(allowedRequest);
+
+        Assert.Equal("http://localhost:5173", allowedResponse.Headers.GetValues("Access-Control-Allow-Origin").Single());
+
+        using var disallowedRequest = new HttpRequestMessage(HttpMethod.Options, "/api/identity/auth/login");
+        disallowedRequest.Headers.Add("Origin", "http://malicious.example");
+        disallowedRequest.Headers.Add("Access-Control-Request-Method", "POST");
+
+        var disallowedResponse = await client.SendAsync(disallowedRequest);
+
+        Assert.False(disallowedResponse.Headers.Contains("Access-Control-Allow-Origin"));
+    }
+
+    [Fact]
     public async Task LoginRejectsInactiveUserGenerically()
     {
         using (var scope = fixture.Services.CreateScope())
@@ -72,15 +103,14 @@ public class IdentityApiTests(IdentityApiFixture fixture) : IClassFixture<Identi
     [Theory]
     [InlineData("", "AdminPassword123!")]
     [InlineData("admin@example.com", "")]
-    public async Task LoginMissingFieldsCurrentlyReturnsUnauthorizedBecauseNoValidatorExists(string email, string password)
+    public async Task LoginMissingFieldsReturnsBadRequest(string email, string password)
     {
         var response = await client.PostAsJsonAsync("/api/identity/auth/login", new LoginRequest
         {
             Email = email, Password = password
         });
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal("Invalid email or password", (await response.Content.ReadFromJsonAsync<ErrorResponse>())!.Message);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
