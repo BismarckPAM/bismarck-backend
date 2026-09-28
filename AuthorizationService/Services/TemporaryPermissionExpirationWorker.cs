@@ -12,6 +12,7 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly ILogger<TemporaryPermissionExpirationWorker> _logger;
     private readonly IAuthorizationEventPublisher _eventPublisher;
+    private readonly IAzureJitProvisioner _provisioner;
 
     // Check every 30 seconds 
     private readonly TimeSpan _checkInterval;
@@ -21,13 +22,15 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
         ISystemClock clock,
         IConfiguration configuration,
         ILogger<TemporaryPermissionExpirationWorker> logger,
-        IAuthorizationEventPublisher eventPublisher)
+        IAuthorizationEventPublisher eventPublisher,
+        IAzureJitProvisioner provisioner)
     {
         _scopeFactory = scopeFactory;
         _clock = clock;
         _configuration = configuration;
         _logger = logger;
         _eventPublisher = eventPublisher;
+        _provisioner = provisioner;
 
         var intervalSeconds = configuration.GetValue("ExpirationWorker:IntervalSeconds", 30);
         _checkInterval = TimeSpan.FromSeconds(intervalSeconds);
@@ -82,9 +85,28 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
         _logger.LogInformation("Found {Count} expired active temporary permissions to process at {Now}", 
             expiredPermissions.Count, now);
 
-        // Update status and revocation timestamp
+        // 1. Remove the cloud-side grant (Azure role assignment) FIRST —
+        //    best effort, never throws, so the local state machine always
+        //    advances even when the cloud API is unavailable.
         foreach (var permission in expiredPermissions)
         {
+            try
+            {
+                var cloudResult = await _provisioner.RevokeAsync(permission, ct);
+                permission.ProvisioningDetail = cloudResult.Detail ?? permission.ProvisioningDetail;
+                if (cloudResult.Succeeded)
+                {
+                    permission.ProvisioningStatus = "EXPIRED";
+                }
+            }
+            catch (Exception cloudException) when (cloudException is not OperationCanceledException)
+            {
+                _logger.LogError(cloudException,
+                    "Cloud revocation failed for PermissionId {PermissionId}; marking EXPIRED locally anyway.",
+                    permission.Id);
+            }
+
+            // 2. Advance the local status to EXPIRED.
             permission.Status = TemporaryPermissionStatus.EXPIRED;
             permission.RevokedAt = now;
         }

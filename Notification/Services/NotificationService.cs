@@ -37,4 +37,50 @@ public class NotificationService(NotificationDbContext dbContext) : INotificatio
 
         return new PagedResult<NotificationResponseDto>(items, totalCount, page, pageSize);
     }
+
+    public async Task<bool> MarkAsReadAsync(
+        Guid userId,
+        Guid notificationId,
+        CancellationToken cancellationToken = default)
+    {
+        // Scope strictly by userId so one user can never mutate another
+        // user's notification row.
+        var notification = await dbContext.Notifications
+            .SingleOrDefaultAsync(n => n.Id == notificationId && n.UserId == userId, cancellationToken);
+
+        if (notification is null)
+        {
+            return false;
+        }
+
+        if (!notification.IsRead)
+        {
+            notification.IsRead = true;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return true;
+    }
+
+    public async Task<int> MarkAllAsReadAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var unread = await dbContext.Notifications
+            .Where(n => n.UserId == userId && !n.IsRead)
+            .ToListAsync(cancellationToken);
+
+        if (unread.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var notification in unread)
+        {
+            notification.IsRead = true;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return unread.Count;
+    }
 }

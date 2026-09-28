@@ -64,6 +64,7 @@ public class KafkaNotificationConsumer : BackgroundService
             KafkaTopics.ApprovalGranted,
             KafkaTopics.ApprovalRejected,
             KafkaTopics.PermissionRevoked,
+            KafkaTopics.JitRevoked,
             KafkaTopics.IdentityEvents
         };
 
@@ -253,6 +254,9 @@ public class KafkaNotificationConsumer : BackgroundService
             // Permission revoked: explicitly targets the affected user
             KafkaTopics.PermissionRevoked => metadataUserId ?? secEvent.Actor,
 
+            // JIT revoked: explicitly targets the affected user
+            KafkaTopics.JitRevoked => metadataUserId ?? secEvent.Actor,
+
             // Identity events: the affected user is the actor (their GUID)
             KafkaTopics.IdentityEvents    => metadataUserId ?? secEvent.Actor,
 
@@ -265,10 +269,14 @@ public class KafkaNotificationConsumer : BackgroundService
 
     private static (string Title, string Message) GenerateContent(SecurityEvent<JsonElement> secEvent, string topic)
     {
-        var resource = string.IsNullOrWhiteSpace(secEvent.Resource) ? "the requested resource" : secEvent.Resource;
+        var resource = ResolveResourceDisplayName(secEvent);
 
         return topic switch
         {
+            KafkaTopics.JitRevoked => (
+                "JIT Access Revoked",
+                $"Your just-in-time access to {resource} was revoked by an administrator."
+            ),
             KafkaTopics.AccessRequested => (
                 "Access Requested",
                 $"Access request submitted for {resource}."
@@ -317,6 +325,30 @@ public class KafkaNotificationConsumer : BackgroundService
                 $"Event {secEvent.Action} occurred on {resource} with outcome '{secEvent.Outcome}'."
             )
         };
+    }
+
+    /// <summary>
+    /// Resolves a human-readable resource label for notification text.
+    /// Prefers an explicit metadata name (e.g. "ResourceName"); if the envelope
+    /// resource is itself a GUID it is treated as an internal id and never
+    /// surfaced to the user. Falls back to a generic phrase.
+    /// </summary>
+    private static string ResolveResourceDisplayName(SecurityEvent<JsonElement> secEvent)
+    {
+        var displayName = TryGetMetadataProperty(secEvent.Metadata, "ResourceName", "resourceName");
+        if (!string.IsNullOrWhiteSpace(displayName))
+        {
+            return displayName;
+        }
+
+        var envelopeResource = secEvent.Resource;
+        if (!string.IsNullOrWhiteSpace(envelopeResource) && !Guid.TryParse(envelopeResource, out _))
+        {
+            return envelopeResource;
+        }
+
+        // Raw UUIDs are never surfaced to end users.
+        return "the requested resource";
     }
 
     private static string? TryGetMetadataProperty(JsonElement metadata, params string[] propertyNames)

@@ -8,6 +8,13 @@ public interface IApproverAuthorizationService
         CreateApprovalRequestRequest request,
         CancellationToken cancellationToken = default);
     Task<IEnumerable<ApprovalRequestResponse>> GetPendingAsync();
+
+    /// <summary>
+    /// The authenticated user's own request history plus aggregate counters,
+    /// served from the database so it survives browser sessions.
+    /// </summary>
+    Task<MyRequestsResponse> GetMyRequestsAsync(CancellationToken cancellationToken = default);
+
     Task<ApprovalRequestResponse> ApproveAsync(
         Guid id,
         CancellationToken cancellationToken = default);
