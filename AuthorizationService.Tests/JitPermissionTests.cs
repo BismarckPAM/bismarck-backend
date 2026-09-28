@@ -94,7 +94,8 @@ public sealed class TemporaryPermissionExpirationWorkerTests
 
         public TemporaryPermissionExpirationWorker CreateWorker(
             ISystemClock clock,
-            Mock<IAuthorizationEventPublisher> publisher)
+            Mock<IAuthorizationEventPublisher> publisher,
+            Mock<IAzureJitProvisioner>? provisioner = null)
         {
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
@@ -102,12 +103,14 @@ public sealed class TemporaryPermissionExpirationWorkerTests
                     ["ExpirationWorker:IntervalSeconds"] = "60"
                 })
                 .Build();
+
             return new TemporaryPermissionExpirationWorker(
                 provider.GetRequiredService<IServiceScopeFactory>(),
                 clock,
                 configuration,
                 NullLogger<TemporaryPermissionExpirationWorker>.Instance,
-                publisher.Object);
+                publisher.Object,
+                provisioner?.Object ?? Mock.Of<IAzureJitProvisioner>());
         }
 
         public async ValueTask DisposeAsync()
