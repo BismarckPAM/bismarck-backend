@@ -10,6 +10,11 @@ public static class KafkaTopics
     public const string ApprovalRejected = "approval-rejected";
     public const string PermissionRevoked = "permission-revoked";
 
+    // Emitted when a JIT session (temporary permission) is manually revoked by
+    // an administrator, so Audit and Notification can react without polling the
+    // database.
+    public const string JitRevoked = "jit-revoked";
+
     // Domain events published by the Identity and Resource services.
     // These were previously published but never consumed (BUG-001).
     public const string IdentityEvents = "identity-events";
@@ -26,6 +31,7 @@ public static class KafkaTopics
         ApprovalGranted,
         ApprovalRejected,
         PermissionRevoked,
+        JitRevoked,
         IdentityEvents,
         ResourceEvents
     ];

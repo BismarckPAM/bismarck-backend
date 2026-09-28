@@ -8,13 +8,21 @@ using Messaging;
 
 namespace AuthorizationService.Services;
 
-// Strong type representation for the approval-granted metadata payload
+// Strong type representation for the approval-granted metadata payload.
+// The Approval service publishes the enriched payload, so the requester id is
+// `RequesterUserId` (not the reviewer id carried by the event's Actor).
 public record ApprovalGrantedMetadata(
     Guid? ApprovalId,
+    Guid? RequesterUserId,
     Guid? UserId,
     Guid? ResourceId,
     int? RequestedLevel,
-    int? DurationMinutes
+    int? DurationMinutes,
+    string? RequesterName,
+    string? RequesterEmail,
+    string? ResourceName,
+    string? ResourceType,
+    string? Action
 );
 
 public class ApprovalGrantedConsumer : BackgroundService
@@ -82,8 +90,10 @@ public class ApprovalGrantedConsumer : BackgroundService
                 // Extract ApprovalId (fallback to EventId if not explicitly placed in metadata)
                 var approvalId = metadata?.ApprovalId ?? secEvent.EventId;
 
-                // Extract User & Resource IDs (with fallback to Actor and Resource envelope properties)
-                var userId = metadata?.UserId 
+                // Extract the REQUESTER id (never the reviewer). Fall back to the
+                // Actor envelope only if the requester id is genuinely absent.
+                var userId = metadata?.RequesterUserId
+                    ?? metadata?.UserId
                     ?? (Guid.TryParse(secEvent.Actor, out var parsedActor) ? parsedActor : Guid.Empty);
 
                 var resourceId = metadata?.ResourceId 
@@ -120,7 +130,11 @@ public class ApprovalGrantedConsumer : BackgroundService
                     RequestedLevel = requestedLevel,
                     GrantedAt = grantedAt,
                     ExpiresAt = expiresAt,
-                    Status = TemporaryPermissionStatus.ACTIVE
+                    Status = TemporaryPermissionStatus.ACTIVE,
+                    // Enriched, human-readable context from the approval payload.
+                    UserEmail = metadata?.RequesterEmail,
+                    ResourceName = metadata?.ResourceName,
+                    Action = metadata?.Action
                 };
 
                 dbContext.TemporaryPermissions.Add(permission);
@@ -148,6 +162,26 @@ public class ApprovalGrantedConsumer : BackgroundService
                         throw;
                     }
                 }
+
+                // Provision the cloud-side role assignment (Azure). Best effort:
+                // a failure is recorded on the row and never blocks the session.
+                var provisioner = scope.ServiceProvider.GetRequiredService<IAzureJitProvisioner>();
+                try
+                {
+                    var grantResult = await provisioner.GrantAsync(permission, stoppingToken);
+                    permission.CloudRoleAssignmentId = grantResult.RoleAssignmentId;
+                    permission.ProvisioningStatus = grantResult.Succeeded ? "ACTIVE" : "LOCAL_ONLY";
+                    permission.ProvisioningDetail = grantResult.Detail;
+                }
+                catch (Exception provisionEx) when (provisionEx is not OperationCanceledException)
+                {
+                    permission.ProvisioningStatus = "FAILED";
+                    permission.ProvisioningDetail = "Cloud provisioning failed.";
+                    _logger.LogError(provisionEx,
+                        "Cloud provisioning failed for PermissionId {PermissionId}.", permission.Id);
+                }
+
+                await dbContext.SaveChangesAsync(stoppingToken);
 
                 consumer.Commit(consumeResult);
                 _logger.LogInformation(
