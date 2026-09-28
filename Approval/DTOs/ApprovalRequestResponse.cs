@@ -6,12 +6,18 @@ public sealed class ApprovalRequestResponse
 {
     public Guid Id { get; set; }
     public string RequesterUserId { get; set; } = string.Empty;
+    public string? RequesterName { get; set; }
+    public string? RequesterEmail { get; set; }
     public string ResourceId { get; set; } = string.Empty;
+    public string? ResourceName { get; set; }
+    public string? ResourceType { get; set; }
+    public string? Action { get; set; }
     public int RequestedLevel { get; set; }
     public string Reason { get; set; } = string.Empty;
     public int DurationMinutes { get; set; }
     public ApprovalStatus Status { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public DateTime? ReviewedAt { get; set; }
     public string? ReviewedByUserId { get; set; }
     public string? RejectionReason { get; set; }

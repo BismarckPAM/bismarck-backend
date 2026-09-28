@@ -12,22 +12,37 @@ namespace Gateway.Service.Middleware;
 ///
 /// Exemptions: CORS preflights (OPTIONS) carry no credentials by design, and
 /// paths listed under the "PublicPaths" config section (e.g. the health probe
-/// and the login endpoint, which has no token yet).
+/// and the login endpoint, which has no token yet). A "PublicPaths" entry may
+/// be a bare path ("/health") which exempts every method, or method-qualified
+/// ("POST /api/onboarding/tickets") which exempts only that verb.
 /// </summary>
-public sealed class AuthorizationHeaderValidatorMiddleware(
-    RequestDelegate next,
-    IConfiguration configuration,
-    ILogger<AuthorizationHeaderValidatorMiddleware> logger)
+public sealed class AuthorizationHeaderValidatorMiddleware
 {
     private const string BearerScheme = "Bearer ";
 
-    private readonly RequestDelegate _next = next;
-    private readonly ILogger<AuthorizationHeaderValidatorMiddleware> _logger = logger;
+    private readonly RequestDelegate _next;
+    private readonly ILogger<AuthorizationHeaderValidatorMiddleware> _logger;
 
-    private readonly HashSet<string> _publicPaths =
-        configuration.GetSection("PublicPaths").Get<string[]>() is { Length: > 0 } paths
-            ? new HashSet<string>(paths, StringComparer.Ordinal)
-            : new HashSet<string>(StringComparer.Ordinal);
+    // Bare paths exempt all methods; method-qualified entries are keyed as "METHOD path".
+    private readonly HashSet<string> _publicPaths;
+    private readonly HashSet<string> _publicMethodPaths;
+
+    public AuthorizationHeaderValidatorMiddleware(
+        RequestDelegate next,
+        IConfiguration configuration,
+        ILogger<AuthorizationHeaderValidatorMiddleware> logger)
+    {
+        _next = next;
+        _logger = logger;
+
+        var entries = configuration.GetSection("PublicPaths").Get<string[]>() ?? [];
+        _publicPaths = entries
+            .Where(entry => !entry.Contains(' ', StringComparison.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
+        _publicMethodPaths = entries
+            .Where(entry => entry.Contains(' ', StringComparison.Ordinal))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -40,7 +55,8 @@ public sealed class AuthorizationHeaderValidatorMiddleware(
         }
 
         var path = context.Request.Path.Value ?? string.Empty;
-        if (_publicPaths.Contains(path))
+        var methodPath = $"{context.Request.Method} {path}";
+        if (_publicPaths.Contains(path) || _publicMethodPaths.Contains(methodPath))
         {
             await _next(context);
             return;

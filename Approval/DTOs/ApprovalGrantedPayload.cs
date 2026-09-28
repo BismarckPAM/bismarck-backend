@@ -7,5 +7,12 @@ public sealed record ApprovalGrantedPayload(
     int RequestedLevel,
     int DurationMinutes,
     string? ReviewedByUserId,
-    DateTime? ReviewedAt
+    DateTime? ReviewedAt,
+    // Enriched, human-readable context (best-effort) so downstream services can
+    // provision/report without re-resolving raw UUIDs.
+    string? RequesterName = null,
+    string? RequesterEmail = null,
+    string? ResourceName = null,
+    string? ResourceType = null,
+    string? Action = null
 );

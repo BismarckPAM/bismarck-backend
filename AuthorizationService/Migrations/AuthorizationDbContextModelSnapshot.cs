@@ -74,8 +74,14 @@ namespace AuthorizationService.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Action")
+                        .HasColumnType("text");
+
                     b.Property<Guid>("ApprovalId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("CloudRoleAssignmentId")
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
@@ -83,11 +89,20 @@ namespace AuthorizationService.Migrations
                     b.Property<DateTimeOffset>("GrantedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ProvisioningDetail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProvisioningStatus")
+                        .HasColumnType("text");
+
                     b.Property<int>("RequestedLevel")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("ResourceId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ResourceName")
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
@@ -99,6 +114,9 @@ namespace AuthorizationService.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("UserEmail")
+                        .HasColumnType("text");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");

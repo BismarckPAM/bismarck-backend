@@ -1,6 +1,8 @@
+using FluentValidation;
 using Identity.Service.Data;
 using Identity.Service.DTOs;
 using Identity.Service.Services;
+using Identity.Service.Validators;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,11 +13,13 @@ namespace Identity.Service.Controllers;
 public class AuthController(
     IdentityDbContext dbContext,
     IPasswordHasher passwordHasher,
-    ITokenService tokenService) : ControllerBase
+    ITokenService tokenService,
+    IValidator<LoginRequest> loginValidator) : ControllerBase
 {
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
+        await loginValidator.ValidateAndThrowAsync(request, cancellationToken);
         var email = request.Email.Trim().ToLowerInvariant();
         var user = await dbContext.Users
             .Include(item => item.Role)

@@ -28,6 +28,10 @@ namespace Approval.Service.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Action")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -46,6 +50,14 @@ namespace Approval.Service.Migrations
                     b.Property<int>("RequestedLevel")
                         .HasColumnType("integer");
 
+                    b.Property<string>("RequesterEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("RequesterName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("RequesterUserId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -53,6 +65,14 @@ namespace Approval.Service.Migrations
 
                     b.Property<string>("ResourceId")
                         .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ResourceName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ResourceType")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -67,6 +87,9 @@ namespace Approval.Service.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
