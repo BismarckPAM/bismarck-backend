@@ -3,6 +3,7 @@ using System;
 using Approval.Service.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Approval.Service.Migrations
 {
     [DbContext(typeof(ApprovalDbContext))]
-    partial class ApprovalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927191827_EnrichApprovalRequests")]
+    partial class EnrichApprovalRequests
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

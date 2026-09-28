@@ -121,7 +121,20 @@ public sealed class AuthorizationController(
             request.ResourceId,
             cancellationToken: cancellationToken);
 
-        await Task.WhenAll(userTask, resourceTask);
+        // The identity/resource lookups run in parallel. Any unexpected
+        // transport-level exception fails CLOSED deterministically (correct
+        // PAM semantics) instead of surfacing as an unhandled 500.
+        try
+        {
+            await Task.WhenAll(userTask, resourceTask);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            var decision = AuthorizationDecisionResult.Deny(
+                AuthorizationDenialReason.UPSTREAM_SERVICE_UNAVAILABLE);
+            await PublishEventAsync(request, decision, cancellationToken);
+            return Ok(decision);
+        }
 
         var user = await userTask;
         if (user.Value is null)

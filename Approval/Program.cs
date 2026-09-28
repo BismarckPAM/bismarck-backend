@@ -1,3 +1,4 @@
+using Approval.Service.Clients;
 using Approval.Service.Data;
 using Approval.Service.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -13,6 +14,20 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IApproverAuthorizationService, ApprovalService>();
 builder.Services.AddSingleton<IDomainEventPublisher, KafkaDomainEventPublisher>();
+
+// Best-effort enrichment clients (identity/resource display names). Failures
+// degrade to null labels and never block request submission.
+var identityServiceUrl = Environment.GetEnvironmentVariable("IDENTITY_SERVICE_URL")
+    ?? builder.Configuration["IdentityService:BaseUrl"]
+    ?? "http://localhost:5001";
+var resourceServiceUrl = Environment.GetEnvironmentVariable("RESOURCE_SERVICE_URL")
+    ?? builder.Configuration["ResourceService:BaseUrl"]
+    ?? "http://localhost:5002";
+
+builder.Services.AddHttpClient<IIdentityContextClient, IdentityContextClient>(client =>
+    client.BaseAddress = new Uri(identityServiceUrl));
+builder.Services.AddHttpClient<IResourceContextClient, ResourceContextClient>(client =>
+    client.BaseAddress = new Uri(resourceServiceUrl));
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var signingKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY")
