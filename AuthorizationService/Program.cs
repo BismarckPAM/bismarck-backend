@@ -109,6 +109,18 @@ builder.Services.AddSingleton<ISystemClock, SystemClock>();
 
 // JIT cloud provisioning: Azure ARM when configured, otherwise a local-only
 // no-op so the end-to-end lifecycle still works in dev/CI.
+// DefaultAzureCredential resolves the Container App's system-assigned managed
+// identity in Azure (no App Registration needed) and falls back to
+// AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID for local development.
+builder.Services.AddSingleton<Azure.Core.TokenCredential>(sp =>
+    new Azure.Identity.DefaultAzureCredential(
+        new Azure.Identity.DefaultAzureCredentialOptions
+        {
+            // Never probe the developer CLI / interactive flows in a container.
+            ExcludeInteractiveBrowserCredential = true,
+            ExcludeAzureCliCredential = true
+        }));
+
 builder.Services.AddHttpClient<AzureJitProvisioner>();
 builder.Services.AddTransient<IAzureJitProvisioner>(sp =>
 {
