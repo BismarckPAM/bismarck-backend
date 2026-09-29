@@ -172,6 +172,11 @@ public sealed class JitSessionsController(
             permission.RevokedByUserId,
             remaining,
             permission.ProvisioningStatus,
-            permission.ProvisioningDetail);
+            permission.ProvisioningDetail,
+            permission.TargetVmName,
+            permission.TargetResourceGroup,
+            permission.TargetHost,
+            permission.TargetOsType,
+            permission.ConnectionCommand);
     }
 }

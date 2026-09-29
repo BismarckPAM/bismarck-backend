@@ -16,6 +16,12 @@ public sealed record JitSessionResponse(
     Guid? RevokedByUserId,
     int RemainingSeconds,
     string? ProvisioningStatus,
-    string? ProvisioningDetail);
+    string? ProvisioningDetail,
+    // Azure VM connection context (null for non-VM resources).
+    string? TargetVmName = null,
+    string? TargetResourceGroup = null,
+    string? TargetHost = null,
+    string? TargetOsType = null,
+    string? ConnectionCommand = null);
 
 public sealed record RevokeJitSessionRequest(string? Reason);
