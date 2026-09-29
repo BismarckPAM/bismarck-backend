@@ -58,7 +58,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
 
-      ConnectionStrings__DefaultConnection: >-
+      # Identity/Program.cs reads "IdentityDatabase" specifically.
+      ConnectionStrings__IdentityDatabase: >-
         Host=identity-db;
         Database=${IDENTITY_DB_NAME};
         Username=${DB_USER};
@@ -104,7 +105,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
 
-      ConnectionStrings__DefaultConnection: >-
+      # Resource/Program.cs reads "ResourceDatabase" specifically.
+      ConnectionStrings__ResourceDatabase: >-
         Host=resource-db;
         Database=${RESOURCE_DB_NAME};
         Username=${DB_USER};
@@ -150,12 +152,28 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
 
-      ConnectionStrings__DefaultConnection: >-
+      # AuthorizationService/Program.cs reads "AuthorizationDatabase" ONLY (no
+      # DefaultConnection fallback). Without this override the service falls back
+      # to the appsettings.json value (Host=localhost;Port=5433), which inside a
+      # container points at the container itself, not authorization-db — so every
+      # query fails and ApprovalGrantedConsumer never creates a permission.
+      ConnectionStrings__AuthorizationDatabase: >-
         Host=authorization-db;
         Database=${AUTHORIZATION_DB_NAME};
         Username=${DB_USER};
         Password=${DB_PASSWORD}
       Kafka__BootstrapServers: kafka:9092
+
+      # Azure JIT cloud provisioning. Left empty by default: when these are not
+      # set, AzureJitOptions.IsConfigured is false and the service falls back to
+      # NoOpJitProvisioner (sessions are recorded as LOCAL_ONLY but still expire).
+      # Fill in .env to provision real Azure RBAC role assignments.
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID:-}
+      AZURE_RESOURCE_GROUP: ${AZURE_RESOURCE_GROUP:-}
+      AZURE_PRINCIPAL_ID: ${AZURE_PRINCIPAL_ID:-}
 
     depends_on:
       - authorization-db
@@ -198,7 +216,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
 
-      ConnectionStrings__DefaultConnection: >-
+      # Approval/Program.cs reads "ApprovalDatabase" first, then "DefaultConnection".
+      ConnectionStrings__ApprovalDatabase: >-
         Host=approval-db;
         Database=${APPROVAL_DB_NAME};
         Username=${DB_USER};
@@ -290,7 +309,11 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
 
-      ConnectionStrings__DefaultConnection: >-
+      # Notification/Program.cs reads "NotificationDatabase" ONLY (no
+      # DefaultConnection fallback). Without this override it falls back to the
+      # appsettings.json value (Host=localhost), which is unreachable inside the
+      # container, so no notification is ever written.
+      ConnectionStrings__NotificationDatabase: >-
         Host=notification-db;
         Database=${NOTIFICATION_DB_NAME};
         Username=${DB_USER};
