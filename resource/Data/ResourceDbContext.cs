@@ -20,6 +20,14 @@ public class ResourceDbContext(DbContextOptions<ResourceDbContext> options) : Db
                 .HasConversion<string>()
                 .HasMaxLength(20)
                 .IsRequired();
+
+            // Azure VM targeting (optional).
+            entity.Property(resource => resource.AzureVmName).HasMaxLength(200);
+            entity.Property(resource => resource.AzureResourceGroup).HasMaxLength(200);
+            entity.Property(resource => resource.AzureResourceId).HasMaxLength(500);
+            entity.Property(resource => resource.OsType).HasMaxLength(20);
+            entity.Property(resource => resource.PublicHost).HasMaxLength(300);
+
             entity.HasQueryFilter(resource => resource.IsActive);
         });
     }

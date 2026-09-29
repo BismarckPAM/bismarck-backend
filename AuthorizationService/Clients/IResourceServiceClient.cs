@@ -14,4 +14,10 @@ public sealed record ResourceContext(
     Guid Id,
     string Type,
     string Environment,
-    string Criticality);
+    string Criticality,
+    // Azure VM targeting - null for non-VM resources.
+    string? AzureVmName = null,
+    string? AzureResourceGroup = null,
+    string? AzureResourceId = null,
+    string? OsType = null,
+    string? PublicHost = null);
