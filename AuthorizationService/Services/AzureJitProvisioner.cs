@@ -50,8 +50,12 @@ public sealed class AzureJitProvisioner : IAzureJitProvisioner
 
             var roleDefinitionId = ResolveRoleDefinitionId(permission.RequestedLevel);
             var assignmentGuid = Guid.NewGuid().ToString();
-            var scope = BuildScope();
-            var url = $"{ArmEndpoint}{scope}/providers/Microsoft.Authorization/roleAssignments/{assignmentGuid}?api-version=2022-04-01";
+            var scope = BuildScope(permission);
+            // Persist the FULL ARM path, never the bare GUID: RevokeAsync rebuilds
+            // the DELETE url as ArmEndpoint + CloudRoleAssignmentId, so a bare GUID
+            // would produce a malformed url and silently never revoke.
+            var assignmentPath = $"{scope}/providers/Microsoft.Authorization/roleAssignments/{assignmentGuid}";
+            var url = $"{ArmEndpoint}{assignmentPath}?api-version=2022-04-01";
 
             var body = new
             {
@@ -75,10 +79,12 @@ public sealed class AzureJitProvisioner : IAzureJitProvisioner
                 return new JitProvisioningResult(false, null, $"Azure returned {(int)response.StatusCode}.");
             }
 
-            var payload = await response.Content.ReadFromJsonAsync<RoleAssignmentDto>(cancellationToken: cancellationToken);
-            var assignmentId = payload?.Id ?? assignmentGuid;
-            _logger.LogInformation("Provisioned Azure role assignment {AssignmentId} for PermissionId {PermissionId}.", assignmentId, permission.Id);
-            return new JitProvisioningResult(true, assignmentId, "Azure role assignment created.");
+            // Record the scope used, for the audit trail.
+            permission.AzureScope = scope;
+            _logger.LogInformation(
+                "Provisioned Azure role assignment {AssignmentId} at scope {Scope} for PermissionId {PermissionId}.",
+                assignmentPath, scope, permission.Id);
+            return new JitProvisioningResult(true, assignmentPath, $"Role assignment created at scope {scope}.");
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -153,10 +159,36 @@ public sealed class AzureJitProvisioner : IAzureJitProvisioner
     private string ResolveRoleDefinitionId(int requestedLevel)
         => requestedLevel >= 3 ? VirtualMachineContributorRoleId : VirtualMachineUserLoginRoleId;
 
-    private string BuildScope()
-        => string.IsNullOrWhiteSpace(_options.ResourceGroup)
-            ? $"/subscriptions/{_options.SubscriptionId}"
-            : $"/subscriptions/{_options.SubscriptionId}/resourceGroups/{_options.ResourceGroup}";
+    /// <summary>
+    /// Resolves the narrowest scope the role assignment can be applied at:
+    ///
+    ///   1. the individual VM  (best - least privilege)
+    ///   2. the VM's resource group
+    ///   3. the configured resource group
+    ///   4. the whole subscription (last resort)
+    ///
+    /// Scoping to a single VM is what makes this real PAM: revoking removes
+    /// access to that one machine, not to everything in the resource group.
+    /// </summary>
+    private string BuildScope(TemporaryPermission permission)
+    {
+        var vmName = permission.TargetVmName;
+        var resourceGroup = permission.TargetResourceGroup;
+
+        if (!string.IsNullOrWhiteSpace(vmName) && !string.IsNullOrWhiteSpace(resourceGroup))
+        {
+            return $"/subscriptions/{_options.SubscriptionId}/resourceGroups/{resourceGroup}"
+                 + $"/providers/Microsoft.Compute/virtualMachines/{vmName}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(resourceGroup))
+            return $"/subscriptions/{_options.SubscriptionId}/resourceGroups/{resourceGroup}";
+
+        if (!string.IsNullOrWhiteSpace(_options.ResourceGroup))
+            return $"/subscriptions/{_options.SubscriptionId}/resourceGroups/{_options.ResourceGroup}";
+
+        return $"/subscriptions/{_options.SubscriptionId}";
+    }
 
     private Task<string?> GetAccessTokenAsync(CancellationToken ct) => GetTokenAsync(ArmScope, ct);
     private Task<string?> GetGraphTokenAsync(CancellationToken ct) => GetTokenAsync("https://graph.microsoft.com/.default", ct);

@@ -65,7 +65,12 @@ public sealed class ResourceServiceClient(
                 resource.Id,
                 resource.Type,
                 resource.Environment,
-                resource.Criticality));
+                resource.Criticality,
+                resource.AzureVmName,
+                resource.AzureResourceGroup,
+                resource.AzureResourceId,
+                resource.OsType,
+                resource.PublicHost));
         }
         catch (HttpRequestException exception)
         {
@@ -108,5 +113,10 @@ public sealed class ResourceServiceClient(
         [property: JsonPropertyName("type")] string Type,
         [property: JsonPropertyName("environment")] string Environment,
         [property: JsonPropertyName("criticality")] string Criticality,
-        [property: JsonPropertyName("isActive")] bool IsActive);
+        [property: JsonPropertyName("isActive")] bool IsActive,
+        [property: JsonPropertyName("azureVmName")] string? AzureVmName,
+        [property: JsonPropertyName("azureResourceGroup")] string? AzureResourceGroup,
+        [property: JsonPropertyName("azureResourceId")] string? AzureResourceId,
+        [property: JsonPropertyName("osType")] string? OsType,
+        [property: JsonPropertyName("publicHost")] string? PublicHost);
 }

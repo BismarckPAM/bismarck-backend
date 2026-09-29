@@ -2,10 +2,13 @@ using AuthorizationService.Data;
 using AuthorizationService.Clients;
 using AuthorizationService.Middleware;
 using AuthorizationService.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Polly;
 using Polly.Extensions.Http;
 using Serilog;
+using System.Text;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,6 +24,33 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
+
+// JWT Authentication & Authorization must match Identity's token contract.
+// Without this the JIT session endpoints cannot identify the caller and return
+// 403 for every request (User would have no claims to resolve).
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var jwtKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY")
+    ?? jwtSettings["SigningKey"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+    throw new InvalidOperationException("JWT_SIGNING_KEY environment variable is required.");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings["Issuer"],
+            ValidAudience = jwtSettings["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 var identityServiceBaseUrl = Environment.GetEnvironmentVariable("IDENTITY_SERVICE_URL")
     ?? builder.Configuration["IdentityService:BaseUrl"]
@@ -107,6 +137,10 @@ if (!string.Equals(
     app.UseHttpsRedirection();
 }
 app.UseMiddleware<ExceptionHandlerMiddleware>();
+// Authentication must run before the controllers so User carries the caller's
+// claims; JitSessionsController resolves the caller from them.
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapControllers();
 
