@@ -4,6 +4,7 @@ using AuthorizationService.DTOs;
 using AuthorizationService.Models;
 using AuthorizationService.Services;
 using Messaging;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +19,7 @@ namespace AuthorizationService.Controllers;
 ///                                       jit-revoked event for audit.
 /// </summary>
 [ApiController]
+[Authorize]
 [Route("api/jit/sessions")]
 public sealed class JitSessionsController(
     AuthorizationDbContext dbContext,
