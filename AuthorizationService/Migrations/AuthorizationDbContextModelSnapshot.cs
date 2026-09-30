@@ -80,7 +80,13 @@ namespace AuthorizationService.Migrations
                     b.Property<Guid>("ApprovalId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AzureScope")
+                        .HasColumnType("text");
+
                     b.Property<string>("CloudRoleAssignmentId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ConnectionCommand")
                         .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("ExpiresAt")
@@ -114,6 +120,18 @@ namespace AuthorizationService.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TargetHost")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetOsType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetResourceGroup")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetVmName")
+                        .HasColumnType("text");
 
                     b.Property<string>("UserEmail")
                         .HasColumnType("text");

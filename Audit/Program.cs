@@ -50,7 +50,16 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+// Behind the API Gateway TLS is already terminated, and internal traffic is
+// plain HTTP. HttpsRedirection here would emit a 307 back to the client for
+// every proxied request, so it must be switchable off.
+if (!string.Equals(
+        Environment.GetEnvironmentVariable("DISABLE_HTTPS_REDIRECTION"),
+        "true",
+        StringComparison.OrdinalIgnoreCase))
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
