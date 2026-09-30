@@ -57,6 +57,8 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # TLS is terminated at the gateway; internal traffic is plain HTTP.
+      DISABLE_HTTPS_REDIRECTION: "true"
 
       # Identity/Program.cs reads "IdentityDatabase" specifically.
       ConnectionStrings__IdentityDatabase: >-
@@ -104,6 +106,8 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # TLS is terminated at the gateway; internal traffic is plain HTTP.
+      DISABLE_HTTPS_REDIRECTION: "true"
 
       # Resource/Program.cs reads "ResourceDatabase" specifically.
       ConnectionStrings__ResourceDatabase: >-
@@ -151,6 +155,8 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # TLS is terminated at the gateway; internal traffic is plain HTTP.
+      DISABLE_HTTPS_REDIRECTION: "true"
 
       # AuthorizationService/Program.cs reads "AuthorizationDatabase" ONLY (no
       # DefaultConnection fallback). Without this override the service falls back
@@ -215,6 +221,8 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # TLS is terminated at the gateway; internal traffic is plain HTTP.
+      DISABLE_HTTPS_REDIRECTION: "true"
 
       # Approval/Program.cs reads "ApprovalDatabase" first, then "DefaultConnection".
       ConnectionStrings__ApprovalDatabase: >-
@@ -261,6 +269,8 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # TLS is terminated at the gateway; internal traffic is plain HTTP.
+      DISABLE_HTTPS_REDIRECTION: "true"
       ConnectionStrings__AuditDatabase: >-
         Host=audit-db;
         Database=${AUDIT_DB_NAME};
@@ -308,6 +318,8 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # TLS is terminated at the gateway; internal traffic is plain HTTP.
+      DISABLE_HTTPS_REDIRECTION: "true"
 
       # Notification/Program.cs reads "NotificationDatabase" ONLY (no
       # DefaultConnection fallback). Without this override it falls back to the
@@ -344,6 +356,8 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # TLS is terminated at the gateway; internal traffic is plain HTTP.
+      DISABLE_HTTPS_REDIRECTION: "true"
 
       # Internal Docker Compose service URLs.
       Services__Identity__Url: http://identity_svc:8080
