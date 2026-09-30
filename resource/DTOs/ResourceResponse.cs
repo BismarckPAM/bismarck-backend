@@ -11,4 +11,11 @@ public class ResourceResponse
     public ResourceCriticality Criticality { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    // Azure VM targeting (optional).
+    public string? AzureVmName { get; set; }
+    public string? AzureResourceGroup { get; set; }
+    public string? AzureResourceId { get; set; }
+    public string? OsType { get; set; }
+    public string? PublicHost { get; set; }
 }
