@@ -8,21 +8,45 @@ on:
       - deploy/production
     paths:
       - 'resource/**'
+      # The Dockerfile also copies the shared messaging library.
+      - 'BuildingBlocks/**'
       - '.github/workflows/resource-svc-AutoDeployTrigger-734199a2-3e86-4e3a-a0a0-7820f77e3b62.yml'
 
-  # Allow manual trigger 
-  workflow_dispatch:      
+  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions: 
+    permissions:
       id-token: write # Required for requesting the OIDC JWT Token
       contents: read  # Required when GH token is used to authenticate with private repo
 
     steps:
       - name: Checkout to the branch
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: bismarckregistry.azurecr.io
+          username: ${{ secrets.RESOURCESVC_REGISTRY_USERNAME }}
+          password: ${{ secrets.RESOURCESVC_REGISTRY_PASSWORD }}
+
+      - name: Build and push container image
+        uses: docker/build-push-action@v6
+        with:
+          # The build context MUST be the repository root. resource/Dockerfile
+          # does COPY BuildingBlocks/Messaging/, which is a SIBLING of
+          # resource/ - building with `resource/` as the context fails with
+          # "failed to calculate checksum ... /BuildingBlocks/Messaging: not found".
+          context: .
+          file: resource/Dockerfile
+          push: true
+          tags: bismarckregistry.azurecr.io/resource-svc:${{ github.sha }}
 
       - name: Azure Login
         uses: azure/login@v2
@@ -31,14 +55,12 @@ jobs:
           tenant-id: ${{ secrets.RESOURCESVC_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.RESOURCESVC_AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build and push container image to registry
-        uses: azure/container-apps-deploy-action@v2
+      - name: Deploy to Azure Container App
+        uses: azure/cli@v2
         with:
-          # Tells Azure to build ONLY the resource folder:
-          appSourcePath: ${{ github.workspace }}/resource
-          registryUrl: bismarckregistry.azurecr.io
-          registryUsername: ${{ secrets.RESOURCESVC_REGISTRY_USERNAME }}
-          registryPassword: ${{ secrets.RESOURCESVC_REGISTRY_PASSWORD }}
-          containerAppName: resource-svc
-          resourceGroup: bismarck-pam-rg
-          imageToBuild: bismarckregistry.azurecr.io/resource-svc:${{ github.sha }}
+          inlineScript: |
+            az config set extension.use_dynamic_install=yes_without_prompt
+            az containerapp update \
+              --name resource-svc \
+              --resource-group bismarck-pam-rg \
+              --image bismarckregistry.azurecr.io/resource-svc:${{ github.sha }}
