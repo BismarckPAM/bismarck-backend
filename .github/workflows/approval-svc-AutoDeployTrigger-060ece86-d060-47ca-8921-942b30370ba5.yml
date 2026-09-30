@@ -7,7 +7,8 @@ on:
     branches: 
       [ deploy/production ]
     paths:
-      - 'Approval/**'       
+      - 'Approval/**'
+      - 'BuildingBlocks/**'
       - '.github/workflows/approval-svc-AutoDeployTrigger-060ece86-d060-47ca-8921-942b30370ba5.yml'
 
   # Allow manual trigger 
