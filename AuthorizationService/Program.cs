@@ -130,6 +130,12 @@ builder.Services.AddTransient<IAzureJitProvisioner>(sp =>
         : new NoOpJitProvisioner(sp.GetRequiredService<ILogger<NoOpJitProvisioner>>());
 });
 
+// Brokered JIT terminal. The service holds the VM private key and owns every
+// SSH channel, so a user never receives the credential and expiry can kill a
+// live shell instead of merely recording that it should.
+builder.Services.Configure<JitSshOptions>(builder.Configuration.GetSection(JitSshOptions.SectionName));
+builder.Services.AddSingleton<IJitTerminalBroker, JitTerminalBroker>();
+
 builder.Services.AddHostedService<ApprovalGrantedConsumer>();
 builder.Services.AddHostedService<TemporaryPermissionExpirationWorker>();
 
