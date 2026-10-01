@@ -14,5 +14,14 @@ public sealed record ApprovalGrantedPayload(
     string? RequesterEmail = null,
     string? ResourceName = null,
     string? ResourceType = null,
-    string? Action = null
+    string? Action = null,
+    // Azure VM targeting resolved at approval time. Carried in the event because
+    // the JIT consumer runs as a background service with no HTTP context, so it
+    // cannot call the Resource Service itself - that endpoint requires a bearer
+    // token. Enriching here, where the caller's token exists, follows the same
+    // "enrich at write time" rule this payload already uses.
+    string? AzureVmName = null,
+    string? AzureResourceGroup = null,
+    string? OsType = null,
+    string? PublicHost = null
 );

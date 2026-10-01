@@ -93,10 +93,19 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
             try
             {
                 var cloudResult = await _provisioner.RevokeAsync(permission, ct);
-                permission.ProvisioningDetail = cloudResult.Detail ?? permission.ProvisioningDetail;
+                // Only overwrite the detail when revocation actually succeeded.
+                // Otherwise the revoke failure would clobber the reason the GRANT
+                // failed, destroying the diagnostic for the original problem.
                 if (cloudResult.Succeeded)
                 {
                     permission.ProvisioningStatus = "EXPIRED";
+                    permission.ProvisioningDetail = cloudResult.Detail;
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Cloud revocation for PermissionId {PermissionId} reported: {Detail}",
+                        permission.Id, cloudResult.Detail);
                 }
             }
             catch (Exception cloudException) when (cloudException is not OperationCanceledException)
