@@ -8,7 +8,17 @@ namespace Approval.Service.Clients;
 public sealed record IdentityContext(string UserId, string? Name, string? Email);
 
 /// <summary>Best-effort, human-readable resource context.</summary>
-public sealed record ResourceContext(string ResourceId, string Type, string Environment)
+public sealed record ResourceContext(
+    string ResourceId,
+    string Type,
+    string Environment,
+    // Azure VM targeting, so the JIT provisioner can scope the role assignment
+    // to the machine and the console can show a connect command. Null for
+    // non-VM resources.
+    string? AzureVmName = null,
+    string? AzureResourceGroup = null,
+    string? OsType = null,
+    string? PublicHost = null)
 {
     /// <summary>Human-readable label, e.g. "VirtualMachine · Development".</summary>
     public string DisplayName =>
@@ -97,8 +107,19 @@ public sealed class ResourceContextClient(HttpClient httpClient, IHttpContextAcc
             $"/api/resources/{Uri.EscapeDataString(resourceId)}",
             cancellationToken);
 
-        return dto is null ? null : new ResourceContext(dto.Id, dto.Type, dto.Environment);
+        return dto is null ? null : new ResourceContext(
+            dto.Id, dto.Type, dto.Environment,
+            dto.AzureVmName, dto.AzureResourceGroup, dto.OsType, dto.PublicHost);
     }
 
-    private sealed record ResourceDto(string Id, string Type, string Environment);
+    // Mirrors Resource.Service.DTOs.ResourceResponse, including the Azure VM
+    // targeting fields added for JIT provisioning.
+    private sealed record ResourceDto(
+        string Id,
+        string Type,
+        string Environment,
+        string? AzureVmName,
+        string? AzureResourceGroup,
+        string? OsType,
+        string? PublicHost);
 }

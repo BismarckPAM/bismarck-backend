@@ -13,6 +13,13 @@ public sealed class ApprovalRequestResponse
     public string? ResourceType { get; set; }
     public string? Action { get; set; }
     public int RequestedLevel { get; set; }
+
+    // Azure VM targeting, copied from the request during enrichment so the
+    // approval-granted event can carry it to the JIT consumer.
+    public string? AzureVmName { get; set; }
+    public string? AzureResourceGroup { get; set; }
+    public string? OsType { get; set; }
+    public string? PublicHost { get; set; }
     public string Reason { get; set; } = string.Empty;
     public int DurationMinutes { get; set; }
     public ApprovalStatus Status { get; set; }
