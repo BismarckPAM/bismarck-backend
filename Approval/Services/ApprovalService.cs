@@ -96,7 +96,11 @@ public sealed class ApprovalService(
             RequesterEmail: approvedRequest.RequesterEmail,
             ResourceName: approvedRequest.ResourceName,
             ResourceType: approvedRequest.ResourceType,
-            Action: approvedRequest.Action
+            Action: approvedRequest.Action,
+            AzureVmName: approvedRequest.AzureVmName,
+            AzureResourceGroup: approvedRequest.AzureResourceGroup,
+            OsType: approvedRequest.OsType,
+            PublicHost: approvedRequest.PublicHost
         );
     
         // Pass cancellationToken to Kafka publisher
@@ -294,6 +298,13 @@ public sealed class ApprovalService(
                 {
                     approvalRequest.ResourceName = resource.DisplayName;
                     approvalRequest.ResourceType = resource.Type;
+                    // Carry the VM targeting through so the JIT consumer does not
+                    // have to call the Resource Service (it has no bearer token
+                    // to do so from a background service).
+                    approvalRequest.AzureVmName = resource.AzureVmName;
+                    approvalRequest.AzureResourceGroup = resource.AzureResourceGroup;
+                    approvalRequest.OsType = resource.OsType;
+                    approvalRequest.PublicHost = resource.PublicHost;
                 }
             }
             catch (Exception) when (!cancellationToken.IsCancellationRequested)
@@ -335,7 +346,11 @@ public sealed class ApprovalService(
             UpdatedAt = request.UpdatedAt,
             ReviewedAt = request.ReviewedAt,
             ReviewedByUserId = request.ReviewedByUserId,
-            RejectionReason = request.RejectionReason
+            RejectionReason = request.RejectionReason,
+            AzureVmName = request.AzureVmName,
+            AzureResourceGroup = request.AzureResourceGroup,
+            OsType = request.OsType,
+            PublicHost = request.PublicHost
         };
     }
 }

@@ -18,6 +18,15 @@ public class ApprovalRequest
     /// <summary>The action the requester wants to perform (e.g. "RDP", "SSH").</summary>
     public string? Action { get; set; }
 
+    // ---- Azure VM targeting (best-effort enrichment) -------------------------
+    // Resolved at approval time so the JIT consumer receives them on the
+    // `approval-granted` event instead of having to call the Resource Service,
+    // which it cannot do without a bearer token.
+    public string? AzureVmName { get; set; }
+    public string? AzureResourceGroup { get; set; }
+    public string? OsType { get; set; }
+    public string? PublicHost { get; set; }
+
     public int RequestedLevel { get; set; }
     public string Reason { get; set; } = string.Empty;
     public int DurationMinutes { get; set; }
