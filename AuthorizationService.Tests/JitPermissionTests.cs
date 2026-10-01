@@ -59,6 +59,66 @@ public sealed class TemporaryPermissionExpirationWorkerTests
 
     private static WorkerFixture CreateFixture(DateTimeOffset now) => new(now);
 
+    /// <summary>
+    /// The brokered terminal must be torn down at expiry, not merely marked as
+    /// no longer authorised. This is what makes the JIT countdown an actual
+    /// control rather than a record.
+    /// </summary>
+    [Fact]
+    public async Task ExpirePermissionsOnceAsync_ClosesLiveBrokeredTerminal()
+    {
+        var now = new DateTimeOffset(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
+        await using var fixture = CreateFixture(now);
+        var permission = fixture.AddPermission(now);
+
+        var terminalBroker = new Mock<IJitTerminalBroker>();
+        var worker = fixture.CreateWorker(
+            new TestClock(now),
+            new Mock<IAuthorizationEventPublisher>(),
+            terminalBroker: terminalBroker);
+
+        await worker.ExpirePermissionsOnceAsync();
+
+        terminalBroker.Verify(
+            broker => broker.CloseAsync(permission.Id, It.IsAny<string>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// A failed cloud revoke must not overwrite the reason the GRANT failed -
+    /// that diagnostic is what operators need when provisioning misbehaves.
+    /// </summary>
+    [Fact]
+    public async Task ExpirePermissionsOnceAsync_PreservesGrantFailureDetail()
+    {
+        var now = new DateTimeOffset(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
+        await using var fixture = CreateFixture(now);
+        var permission = fixture.AddPermission(now);
+        permission.ProvisioningStatus = "LOCAL_ONLY";
+        permission.ProvisioningDetail = "Azure provisioning is not configured; local-only session.";
+        await fixture.Context.SaveChangesAsync();
+
+        var provisioner = new Mock<IAzureJitProvisioner>();
+        provisioner
+            .Setup(item => item.RevokeAsync(It.IsAny<TemporaryPermission>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new JitProvisioningResult(false, null, "Revoke failed."));
+
+        var worker = fixture.CreateWorker(
+            new TestClock(now),
+            new Mock<IAuthorizationEventPublisher>(),
+            provisioner);
+
+        await worker.ExpirePermissionsOnceAsync();
+
+        var saved = await fixture.Context.TemporaryPermissions
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == permission.Id);
+        Assert.Equal("LOCAL_ONLY", saved.ProvisioningStatus);
+        Assert.Equal(
+            "Azure provisioning is not configured; local-only session.",
+            saved.ProvisioningDetail);
+    }
+
     private sealed class WorkerFixture : IAsyncDisposable
     {
         private readonly ServiceProvider provider;
@@ -95,7 +155,8 @@ public sealed class TemporaryPermissionExpirationWorkerTests
         public TemporaryPermissionExpirationWorker CreateWorker(
             ISystemClock clock,
             Mock<IAuthorizationEventPublisher> publisher,
-            Mock<IAzureJitProvisioner>? provisioner = null)
+            Mock<IAzureJitProvisioner>? provisioner = null,
+            Mock<IJitTerminalBroker>? terminalBroker = null)
         {
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
@@ -110,7 +171,8 @@ public sealed class TemporaryPermissionExpirationWorkerTests
                 configuration,
                 NullLogger<TemporaryPermissionExpirationWorker>.Instance,
                 publisher.Object,
-                provisioner?.Object ?? Mock.Of<IAzureJitProvisioner>());
+                provisioner?.Object ?? Mock.Of<IAzureJitProvisioner>(),
+                terminalBroker?.Object ?? Mock.Of<IJitTerminalBroker>());
         }
 
         public async ValueTask DisposeAsync()
