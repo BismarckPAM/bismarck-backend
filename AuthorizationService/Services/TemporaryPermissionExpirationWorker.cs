@@ -13,6 +13,7 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
     private readonly ILogger<TemporaryPermissionExpirationWorker> _logger;
     private readonly IAuthorizationEventPublisher _eventPublisher;
     private readonly IAzureJitProvisioner _provisioner;
+    private readonly IJitTerminalBroker _terminalBroker;
 
     // Check every 30 seconds 
     private readonly TimeSpan _checkInterval;
@@ -23,7 +24,8 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
         IConfiguration configuration,
         ILogger<TemporaryPermissionExpirationWorker> logger,
         IAuthorizationEventPublisher eventPublisher,
-        IAzureJitProvisioner provisioner)
+        IAzureJitProvisioner provisioner,
+        IJitTerminalBroker terminalBroker)
     {
         _scopeFactory = scopeFactory;
         _clock = clock;
@@ -31,6 +33,7 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
         _logger = logger;
         _eventPublisher = eventPublisher;
         _provisioner = provisioner;
+        _terminalBroker = terminalBroker;
 
         var intervalSeconds = configuration.GetValue("ExpirationWorker:IntervalSeconds", 30);
         _checkInterval = TimeSpan.FromSeconds(intervalSeconds);
@@ -118,6 +121,23 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
             // 2. Advance the local status to EXPIRED.
             permission.Status = TemporaryPermissionStatus.EXPIRED;
             permission.RevokedAt = now;
+        }
+
+        // Kill any live brokered terminal FIRST. This is the point of the whole
+        // design: the user's shell must die the moment the TTL lapses, not merely
+        // be recorded as no longer authorised.
+        foreach (var permission in expiredPermissions)
+        {
+            try
+            {
+                await _terminalBroker.CloseAsync(permission.Id, "JIT session expired.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Failed to close brokered terminal for PermissionId {PermissionId}.",
+                    permission.Id);
+            }
         }
 
         // Save to database FIRST before publishing events
