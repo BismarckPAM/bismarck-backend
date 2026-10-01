@@ -24,6 +24,7 @@ namespace AuthorizationService.Controllers;
 public sealed class JitSessionsController(
     AuthorizationDbContext dbContext,
     IAzureJitProvisioner provisioner,
+    IJitTerminalBroker terminalBroker,
     IAuthorizationEventPublisher eventPublisher,
     ISystemClock clock) : ControllerBase
 {
@@ -82,6 +83,10 @@ public sealed class JitSessionsController(
                 permission.ExpiresAt
             });
         }
+
+        // Drop any live brokered terminal immediately, so a manual revoke actually
+        // ends the session rather than only updating the record.
+        await terminalBroker.CloseAsync(permission.Id, "JIT session revoked by administrator.");
 
         // Remove the cloud grant FIRST (best effort, never throws).
         try
