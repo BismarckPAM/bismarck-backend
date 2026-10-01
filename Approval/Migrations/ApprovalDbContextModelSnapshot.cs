@@ -32,11 +32,23 @@ namespace Approval.Service.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("AzureResourceGroup")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AzureVmName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("DurationMinutes")
                         .HasColumnType("integer");
+
+                    b.Property<string>("OsType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PublicHost")
+                        .HasColumnType("text");
 
                     b.Property<string>("Reason")
                         .IsRequired()

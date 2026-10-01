@@ -23,7 +23,14 @@ public record ApprovalGrantedMetadata(
     string? RequesterEmail,
     string? ResourceName,
     string? ResourceType,
-    string? Action
+    string? Action,
+    // Azure VM targeting, enriched by the Approval Service at write time. Carried
+    // in the event rather than fetched: this consumer is a background service with
+    // no HTTP context, so it has no bearer token to call the Resource Service with.
+    string? AzureVmName = null,
+    string? AzureResourceGroup = null,
+    string? OsType = null,
+    string? PublicHost = null
 );
 
 public class ApprovalGrantedConsumer : BackgroundService
@@ -135,14 +142,21 @@ public class ApprovalGrantedConsumer : BackgroundService
                     // Enriched, human-readable context from the approval payload.
                     UserEmail = metadata?.RequesterEmail,
                     ResourceName = metadata?.ResourceName,
-                    Action = metadata?.Action
+                    Action = metadata?.Action,
+                    // Azure VM targeting, supplied by the Approval Service. This
+                    // consumer has no HTTP context and therefore no bearer token,
+                    // so it cannot call the Resource Service to resolve these.
+                    TargetVmName = metadata?.AzureVmName,
+                    TargetResourceGroup = metadata?.AzureResourceGroup,
+                    TargetHost = metadata?.PublicHost,
+                    TargetOsType = metadata?.OsType,
+                    ConnectionCommand = BuildConnectionCommand(
+                        metadata?.AzureVmName,
+                        metadata?.AzureResourceGroup,
+                        metadata?.PublicHost,
+                        metadata?.OsType,
+                        metadata?.RequesterEmail)
                 };
-
-                // Resolve the Azure VM this grant targets so the provisioner can
-                // scope the role assignment to the machine, and the console can
-                // tell the user how to connect. Advisory: a failure here must not
-                // block the grant (falls back to resource-group scope).
-                await PopulateVmContextAsync(permission, resourceId, scope, stoppingToken);
 
                 dbContext.TemporaryPermissions.Add(permission);
 
@@ -213,67 +227,28 @@ public class ApprovalGrantedConsumer : BackgroundService
     }
 
     /// <summary>
-    /// Best-effort resolution of the Azure VM behind a resource, so the session
-    /// can be scoped to the machine and the console can show a connect command.
-    /// Never throws: on any failure the grant still proceeds at resource-group
-    /// scope, which is strictly broader but still time-boxed and revocable.
-    /// </summary>
-    private async Task PopulateVmContextAsync(
-        TemporaryPermission permission,
-        Guid resourceId,
-        IServiceScope scope,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var resourceClient = scope.ServiceProvider
-                .GetService<IResourceServiceClient>();
-            if (resourceClient is null)
-                return;
-
-            var result = await resourceClient.GetResourceContextAsync(resourceId, null, cancellationToken);
-            if (result.Value is null)
-                return;
-
-            var resource = result.Value;
-            permission.TargetVmName = resource.AzureVmName;
-            permission.TargetResourceGroup = resource.AzureResourceGroup;
-            permission.TargetHost = resource.PublicHost;
-            permission.TargetOsType = resource.OsType;
-            permission.ConnectionCommand = BuildConnectionCommand(resource, permission.UserEmail);
-
-            _logger.LogInformation(
-                "Resolved VM target for PermissionId {PermissionId}: vm={VmName} rg={ResourceGroup} os={OsType}",
-                permission.Id, resource.AzureVmName, resource.AzureResourceGroup, resource.OsType);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            _logger.LogWarning(exception,
-                "Could not resolve VM context for resource {ResourceId}; falling back to resource-group scope.",
-                resourceId);
-        }
-    }
-
-    /// <summary>
     /// Builds the command a user should run to reach the VM while the JIT
     /// session is ACTIVE. Access is only actually possible because the
     /// "Virtual Machine User Login" role assignment exists for the duration.
+    /// Returns null when the approved resource is not an Azure VM.
     /// </summary>
     private static string? BuildConnectionCommand(
-        AuthorizationService.Clients.ResourceContext resource,
+        string? vmName,
+        string? resourceGroup,
+        string? publicHost,
+        string? osType,
         string? userEmail)
     {
-        if (string.IsNullOrWhiteSpace(resource.AzureVmName))
+        if (string.IsNullOrWhiteSpace(vmName))
             return null;
 
         var login = string.IsNullOrWhiteSpace(userEmail)
             ? "<your-azure-email>"
             : userEmail;
 
-        var isWindows = string.Equals(resource.OsType, "Windows", StringComparison.OrdinalIgnoreCase);
-
+        var isWindows = string.Equals(osType, "Windows", StringComparison.OrdinalIgnoreCase);
         return isWindows
-            ? $"az vm ssh -g {resource.AzureResourceGroup} -n {resource.AzureVmName} -l {login}"
-            : $"ssh {login}@{resource.PublicHost ?? "<vm-host>"}";
+            ? $"az vm ssh -g {resourceGroup} -n {vmName} -l {login}"
+            : $"ssh {login}@{publicHost ?? "<vm-host>"}";
     }
 }
