@@ -30,7 +30,7 @@
     <!-- SSH client used by the brokered JIT terminal. Lets the service open a
          PTY session to the VM using the held private key, so the user never
          receives the credential and expiry can genuinely kill the channel. -->
-    <PackageReference Include="SSH.NET" Version="2024.2.0" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
   </ItemGroup>
 
   <ItemGroup>
