@@ -181,6 +181,34 @@ services:
       AZURE_RESOURCE_GROUP: ${AZURE_RESOURCE_GROUP:-}
       AZURE_PRINCIPAL_ID: ${AZURE_PRINCIPAL_ID:-}
 
+      # ------------------------------------------------------------------
+      # Brokered JIT terminal (optional).
+      # Without these the /api/jit/terminal endpoint refuses every connect
+      # with "not configured" and the UI hides the terminal button.
+      #
+      # JIT_SSH_PRIVATE_KEY_PATH is preferred over inline PEM: mount the key
+      # as a read-only secret and point at it, which avoids the newline
+      # mangling that inline keys suffer in environment variables.
+      # ------------------------------------------------------------------
+      JitSsh__PrivateKeyPath: ${JIT_SSH_PRIVATE_KEY_PATH:-}
+      JitSsh__PrivateKey: ${JIT_SSH_PRIVATE_KEY:-}
+      JitSsh__Passphrase: ${JIT_SSH_PASSPHRASE:-}
+      # Force a single shared SSH account. Leave blank to log in as each
+      # session's own user (the account Azure creates on the VM, matching the
+      # `ssh user@vm` command shown in the UI).
+      JitSsh__Username: ${JIT_SSH_USERNAME:-}
+      JitSsh__UsernameTemplate: ${JIT_SSH_USERNAME_TEMPLATE:-}
+      JitSsh__Port: ${JIT_SSH_PORT:-22}
+      JitSsh__HostKeyFingerprint: ${JIT_SSH_HOST_KEY_FINGERPRINT:-}
+      # Per-user keys live in a mounted directory, one file per SSH login
+      # (e.g. keys/user@example.com). This is the practical way to supply them:
+      # Compose cannot generate a dynamic env var name per user, but it can
+      # mount a volume. The broker picks the file matching the session's login
+      # before falling back to the shared key above.
+      JitSsh__PrivateKeyDirectory: ${JIT_SSH_PRIVATE_KEY_DIRECTORY:-}
+      volumes:
+        - ${JIT_SSH_KEYS_HOST_DIR:-./jit-keys}:/var/run/bismarck/ssh-keys:ro
+
     depends_on:
       - authorization-db
       - identity_svc
