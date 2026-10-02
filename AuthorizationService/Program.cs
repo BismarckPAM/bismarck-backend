@@ -48,6 +48,26 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ClockSkew = TimeSpan.Zero
         };
+
+        // The brokered terminal arrives as a WebSocket, and the browser WebSocket
+        // API cannot set an Authorization header. Without reading the token from
+        // the query string the handshake authenticated but produced a principal
+        // with no claims, so JitTerminalController.ResolveCaller() returned null
+        // and every connect was refused. Scoped to WebSocket requests only.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (string.IsNullOrEmpty(context.Token))
+                {
+                    var queryToken = context.Request.Query["access_token"].ToString();
+                    if (!string.IsNullOrWhiteSpace(queryToken))
+                        context.Token = queryToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
