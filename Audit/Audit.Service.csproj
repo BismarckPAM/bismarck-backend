@@ -4,7 +4,16 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The test projects live inside this folder (same layout as Approval,
+         Notification and Analytics) and must never be compiled into the web
+         service. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Audit.Service.Tests/**;Audit.Service.IntegrationTests/**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Audit.Service.Tests/**/*.cs" />
+    <Compile Remove="Audit.Service.IntegrationTests/**/*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
@@ -20,6 +29,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BuildingBlocks\Messaging\Messaging.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- BuildContainsPattern is internal so the unit suite can assert the LIKE
+         wildcard escaping directly. -->
+    <InternalsVisibleTo Include="Audit.Service.Tests" />
   </ItemGroup>
 
 </Project>
