@@ -154,6 +154,28 @@ jobs:
 
 
       # ========================================================
+      # Audit Tests (BIS-403)
+      # ========================================================
+
+      - name: Run Audit Unit Tests
+        if: matrix.service == 'Audit'
+        run: |
+          dotnet test \
+            ./Audit/Audit.Service.Tests/Audit.Service.Tests.csproj \
+            --configuration Release \
+            --verbosity normal
+
+
+      - name: Run Audit Integration Tests
+        if: matrix.service == 'Audit'
+        run: |
+          dotnet test \
+            ./Audit/Audit.Service.IntegrationTests/Audit.Service.IntegrationTests.csproj \
+            --configuration Release \
+            --verbosity normal
+
+
+      # ========================================================
       # Notification Tests
       # ========================================================
 
