@@ -323,6 +323,64 @@ services:
 
 
   # ============================================================
+  # Analytics Services (BIS-402)
+  # ============================================================
+
+  analytics-db:
+    image: postgres:latest
+    container_name: analytics-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${ANALYTICS_DB_NAME}
+
+    ports:
+      - "${ANALYTICS_DB_PORT}:5432"
+
+    volumes:
+      - analytics_data:/var/lib/postgresql/data
+
+
+  analytics_svc:
+    build:
+      context: .
+      dockerfile: Analytics/Dockerfile
+
+    container_name: analytics_svc
+
+    # No host port mapping.
+    # The API Gateway is the only external entry point.
+    # Internal URL:
+    # http://analytics_svc:8080
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # TLS is terminated at the gateway; internal traffic is plain HTTP.
+      DISABLE_HTTPS_REDIRECTION: "true"
+
+      # Analytics/Program.cs reads "AnalyticsDatabase" specifically.
+      ConnectionStrings__AnalyticsDatabase: >-
+        Host=analytics-db;
+        Database=${ANALYTICS_DB_NAME};
+        Username=${DB_USER};
+        Password=${DB_PASSWORD}
+      Kafka__BootstrapServers: kafka:9092
+      # Must NOT be the Audit consumer group: consumer groups split a topic
+      # between their members, so reusing bismarck-audit-service would stop
+      # Analytics from receiving its own copy of the event stream.
+      Kafka__GroupId: bismarck-analytics-service
+
+      # Same HS256 signing key as Identity Service. Passed from the host
+      # environment like the other secret-bearing variables; never hard-coded.
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
+
+    depends_on:
+      - analytics-db
+      - kafka
+
+
+  # ============================================================
   # Notification Services
   # ============================================================
 
@@ -404,6 +462,7 @@ services:
       Services__Approval__Url: http://approval_svc:8080
       Services__Audit__Url: http://audit_svc:8080
       Services__Notification__Url: http://notification_svc:8080
+      Services__Analytics__Url: http://analytics_svc:8080
 
       # Frontend origin(s) accepted by the gateway CORS policy.
       AllowedOrigins__0: ${ALLOWED_ORIGINS}
@@ -415,6 +474,7 @@ services:
       - approval_svc
       - notification_svc
       - audit_svc
+      - analytics_svc
 
 
 # ============================================================
@@ -429,3 +489,4 @@ volumes:
   approval_data:
   audit_data:
   notification_data:
+  analytics_data:
