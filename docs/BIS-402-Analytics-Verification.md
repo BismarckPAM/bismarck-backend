@@ -10,6 +10,9 @@ It answers two questions an evaluator needs answered:
 
 ---
 
+
+
+
 ## 1. Canonical metric mapping
 
 The definitions live in exactly one place in code:
