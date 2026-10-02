@@ -7,6 +7,7 @@ using AuthorizationService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace AuthorizationService.Controllers;
 
@@ -31,11 +32,46 @@ namespace AuthorizationService.Controllers;
 public sealed class JitTerminalController(
     AuthorizationDbContext dbContext,
     IJitTerminalBroker broker,
+    IOptions<JitSshOptions> options,
     ILogger<JitTerminalController> logger) : ControllerBase
 {
+    private readonly JitSshOptions _options = options.Value;
+    /// <summary>
+    /// Reports whether the broker holds a usable credential, and which SSH login
+    /// it would use for this session. The frontend calls this to decide whether to
+    /// offer the terminal at all, instead of failing after the user clicks.
+    /// </summary>
     [HttpGet("{id:guid}/status")]
-    public IActionResult Status(Guid id)
-        => Ok(new { permissionId = id, brokerConfigured = broker.IsConfigured });
+    public async Task<IActionResult> Status(
+        Guid id,
+        [FromQuery] string? userEmail,
+        CancellationToken cancellationToken)
+    {
+        var permission = await dbContext.TemporaryPermissions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+
+        if (permission is null)
+            return NotFound(new { message = $"JIT session '{id}' was not found." });
+
+        var login = _options.ResolveLogin(userEmail ?? permission.UserEmail);
+        var hasKey = login is not null && _options.TryResolveKey(login, out _, out _);
+
+        return Ok(new
+        {
+            permissionId = id,
+            brokerConfigured = broker.IsConfigured,
+            login,
+            keyAvailable = hasKey,
+            // One reason the UI can show verbatim, so the operator does not have to
+            // read container logs to find out which secret is missing.
+            unavailableReason = broker.IsConfigured
+                ? hasKey
+                    ? null
+                    : $"No SSH private key is configured for login '{login}'."
+                : "The brokered terminal is not configured on the Authorization Service."
+        });
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Connect(
@@ -92,6 +128,12 @@ private async Task PumpAsync(
     {
         var receiveBuffer = new byte[8192];
 
+        // A dedicated token so teardown can stop the output pump deterministically.
+        // The previous code awaited the pump AFTER disposing the SSH session and
+        // without a cancellation signal, so closing the browser tab could leave the
+        // pump blocked in ShellStream.ReadAsync holding the request open.
+        using var pumpLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
         async Task SendAsync(object frame, CancellationToken ct)
         {
             if (socket.State != WebSocketState.Open) return;
@@ -117,7 +159,7 @@ private async Task PumpAsync(
             }
         }
 
-        var outputPump = SendOutputAsync(cancellationToken);
+        var outputPump = SendOutputAsync(pumpLifetime.Token);
 
         try
         {
@@ -136,7 +178,13 @@ private async Task PumpAsync(
                 if (result.MessageType == WebSocketMessageType.Close)
                     break;
 
-                var message = Encoding.UTF8.GetString(receiveBuffer, 0, result.Count);
+                // Reassemble fragmented frames: a paste or a burst of output can
+                // arrive split across several frames, and parsing each partial
+                // buffer separately silently dropped input.
+                var message = result.MessageType == WebSocketMessageType.Text
+                    ? await ReadTextFrameAsync(socket, receiveBuffer, result, cancellationToken)
+                    : string.Empty;
+
                 if (string.IsNullOrWhiteSpace(message))
                     continue;
 
@@ -175,10 +223,47 @@ private async Task PumpAsync(
         }
         finally
         {
+            // Tell the client the session is over BEFORE tearing the channel down,
+            // then stop the pump and release the SSH session.
+            try
+            {
+                await SendAsync(new { t = "e", m = "Session closed." }, CancellationToken.None);
+            }
+            catch
+            {
+                // Socket already gone - nothing useful to report.
+            }
+
+            await pumpLifetime.CancelAsync();
             await session.DisposeAsync();
             try { await outputPump; } catch { /* socket already gone */ }
-            await SendAsync(new { t = "e", m = "Session closed." }, CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    /// Reads one complete text frame, continuing to receive while the current
+    /// message is fragmented.
+    /// </summary>
+    private static async Task<string> ReadTextFrameAsync(
+        WebSocket socket,
+        byte[] buffer,
+        WebSocketReceiveResult first,
+        CancellationToken cancellationToken)
+    {
+        using var payload = new MemoryStream();
+        payload.Write(buffer, 0, first.Count);
+
+        var result = first;
+        while (!result.EndOfMessage)
+        {
+            result = await socket.ReceiveAsync(buffer, cancellationToken);
+            if (result.MessageType == WebSocketMessageType.Close)
+                break;
+
+            payload.Write(buffer, 0, result.Count);
+        }
+
+        return Encoding.UTF8.GetString(payload.ToArray());
     }
 
     private (Guid? UserId, bool IsAdmin) ResolveCaller()
