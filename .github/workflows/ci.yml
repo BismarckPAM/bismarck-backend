@@ -31,6 +31,7 @@ jobs:
           - Approval
           - Audit
           - Notification
+          - Analytics
           - gateway
 
     steps:
@@ -166,6 +167,28 @@ jobs:
 
 
       # ========================================================
+      # Analytics Tests (BIS-402)
+      # ========================================================
+
+      - name: Run Analytics Unit Tests
+        if: matrix.service == 'Analytics'
+        run: |
+          dotnet test \
+            ./Analytics/Analytics.Service.Tests/Analytics.Service.Tests.csproj \
+            --configuration Release \
+            --verbosity normal
+
+
+      - name: Run Analytics Integration Tests
+        if: matrix.service == 'Analytics'
+        run: |
+          dotnet test \
+            ./Analytics/Analytics.Service.IntegrationTests/Analytics.Service.IntegrationTests.csproj \
+            --configuration Release \
+            --verbosity normal
+
+
+      # ========================================================
       # Gateway
       #
       # Gateway currently has no test project.
@@ -226,6 +249,7 @@ jobs:
           APPROVAL_DB_NAME=approval_db
           AUDIT_DB_NAME=audit_db
           NOTIFICATION_DB_NAME=notification_db
+          ANALYTICS_DB_NAME=analytics_db
 
           IDENTITY_DB_PORT=5433
           RESOURCE_DB_PORT=5434
@@ -233,10 +257,15 @@ jobs:
           APPROVAL_DB_PORT=5436
           AUDIT_DB_PORT=5437
           NOTIFICATION_DB_PORT=5438
+          ANALYTICS_DB_PORT=5439
 
           GATEWAY_PORT=8080
 
           ALLOWED_ORIGINS=http://localhost:3000
+
+          # CI-only placeholder. Required by Analytics/Program.cs (and the other
+          # secure services) to start; never a real credential.
+          JWT_SIGNING_KEY=ci-only-not-a-real-signing-key-000000000000
           EOF
 
 
@@ -315,9 +344,12 @@ jobs:
 
           - service: Audit
             image_name: audit_svc
-          
+
           - service: Notification
             image_name: notification_svc
+
+          - service: Analytics
+            image_name: analytics_svc
 
           - service: gateway
             image_name: gateway_svc
