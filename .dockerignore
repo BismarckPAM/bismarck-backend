@@ -1,0 +1,36 @@
+# Build context hygiene for the multi-stage Dockerfiles.
+#
+# Why this file is required: every service Dockerfile does
+#   1. COPY <Service>/<Service>.csproj   -> dotnet restore
+#   2. COPY <Service>/                   -> dotnet build --no-restore
+# Without this file, step 2 also copies the *host's* obj/ and bin/ folders on
+# top of the ones the container just restored. A host-generated
+# obj/project.assets.json points at the developer's absolute package folder
+# (e.g. C:\Users\<user>\.nuget\packages), so the in-container build fails with
+#   NETSDK1064: Package '<x>' was not found.
+# Excluding them keeps the restore stage authoritative and makes local image
+# builds behave exactly like a clean CI checkout.
+
+**/bin/
+**/obj/
+**/TestResults/
+**/node_modules/
+
+# Local secrets must never be baked into an image. docker compose reads .env
+# from the project directory for variable substitution, not from the build
+# context, so excluding it changes nothing functionally.
+.env
+.env.*
+!.env.example
+
+# Contains private SSH keys for the brokered JIT terminal.
+jit-keys/
+*.pem
+*.key
+
+# VCS / IDE
+.git/
+.gitignore
+.vs/
+.vscode/
+.idea/

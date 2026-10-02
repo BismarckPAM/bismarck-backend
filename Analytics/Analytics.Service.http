@@ -1,0 +1,25 @@
+@Analytics.Service_HostAddress = http://localhost:5290
+@token = paste-a-valid-identity-service-jwt-here
+
+### Swagger UI
+GET {{Analytics.Service_HostAddress}}/swagger/index.html
+
+### Summary: all available history
+GET {{Analytics.Service_HostAddress}}/api/analytics/summary
+Authorization: Bearer {{token}}
+
+### Summary for October 2026
+GET {{Analytics.Service_HostAddress}}/api/analytics/summary?startDate=2026-10-01T00:00:00Z&endDate=2026-10-31T23:59:59Z
+Authorization: Bearer {{token}}
+
+### Top requested resources
+GET {{Analytics.Service_HostAddress}}/api/analytics/top-resources?startDate=2026-10-01T00:00:00Z&endDate=2026-10-31T23:59:59Z&limit=10
+Authorization: Bearer {{token}}
+
+### Denial reasons
+GET {{Analytics.Service_HostAddress}}/api/analytics/denial-reasons?startDate=2026-10-01T00:00:00Z&endDate=2026-10-31T23:59:59Z
+Authorization: Bearer {{token}}
+
+### Invalid range -> expect 400
+GET {{Analytics.Service_HostAddress}}/api/analytics/summary?startDate=2026-10-31T00:00:00Z&endDate=2026-10-01T00:00:00Z
+Authorization: Bearer {{token}}

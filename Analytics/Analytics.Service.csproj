@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The test projects live inside this folder (same layout as Approval and
+         Notification) and must never be compiled into the web service. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Analytics.Service.Tests/**;Analytics.Service.IntegrationTests/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Analytics.Service.Tests/**/*.cs" />
+    <Compile Remove="Analytics.Service.IntegrationTests/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Confluent.Kafka" Version="2.15.1" />
+    <!-- Matches Resource.Service.csproj, the existing Swashbuckle version. -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BuildingBlocks\Messaging\Messaging.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The unit tests verify the percentage/rounding policy directly. -->
+    <InternalsVisibleTo Include="Analytics.Service.Tests" />
+  </ItemGroup>
+
+</Project>
