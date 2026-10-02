@@ -1,32 +1,8 @@
 using System.Collections.Concurrent;
 using AuthorizationService.Models;
 using Microsoft.Extensions.Options;
-using Renci.SshNet;
-using Renci.SshNet.Common;
 
 namespace AuthorizationService.Services;
-
-/// <summary>Configuration for the held SSH credential used by the brokered terminal.</summary>
-public sealed class JitSshOptions
-{
-    public const string SectionName = "JitSsh";
-
-    /// <summary>PEM private key. Supplied via <c>JitSsh__PrivateKey</c>, never committed.</summary>
-    public string? PrivateKey { get; init; }
-
-    public string? Username { get; init; }
-    public int Port { get; init; } = 22;
-
-    /// <summary>
-    /// Optional SHA256 fingerprint of the VM host key. When set, the broker
-    /// refuses to connect unless the server presents exactly this key - this is
-    /// what stops a DNS/IP hijack from silently capturing the session.
-    /// </summary>
-    public string? HostKeyFingerprint { get; init; }
-
-    public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(PrivateKey) && !string.IsNullOrWhiteSpace(Username);
-}
 
 /// <summary>
 /// Default broker implementation. Opens one <see cref="SshClient"/> per live
@@ -41,7 +17,7 @@ public sealed class JitTerminalBroker(
 
     public bool IsConfigured => _options.IsConfigured;
 
-    public Task<IJitTerminalSession> OpenAsync(
+    public async Task<IJitTerminalSession> OpenAsync(
         TemporaryPermission permission,
         Guid callerUserId,
         bool callerIsAdmin,
@@ -71,8 +47,8 @@ public sealed class JitTerminalBroker(
         {
             throw new TerminalRefusedException(
                 TerminalRefusal.NotConfigured,
-                "The brokered terminal is not configured: JitSsh__PrivateKey and "
-                + "JitSsh__Username are required on this service.");
+                "The brokered terminal is not configured: supply JitSsh__PrivateKeyPath "
+                + "(or JitSsh__PrivateKey), plus JitSsh__PrivateKeyDirectory for per-user keys.");
         }
 
         if (string.IsNullOrWhiteSpace(permission.TargetHost))
@@ -82,10 +58,32 @@ public sealed class JitTerminalBroker(
                 "This JIT session has no target host configured.");
         }
 
-        var session = new SshTerminalSession(
-            permission, callerUserId, _options, columns, rows, _live, logger, cancellationToken);
+        // Log in AS THE SESSION'S OWN USER, not a hardcoded shared account. This is
+        // what makes the broker match the `ssh user@gmail@vm` command the UI shows:
+        // Azure provisions an AAD account named after the email, and that account
+        // is the one entitled to the JIT role assignment.
+        var login = _options.ResolveLogin(permission.UserEmail);
 
-        return Task.FromResult<IJitTerminalSession>(session);
+        if (string.IsNullOrWhiteSpace(login))
+        {
+            throw new TerminalRefusedException(
+                TerminalRefusal.NotConfigured,
+                "No SSH login could be resolved for this session. Set JitSsh__Username, "
+                + "or ensure the JIT session carries a user email.");
+        }
+
+        if (!_options.TryResolveKey(login, out var pem, out var keyPath))
+        {
+            throw new TerminalRefusedException(
+                TerminalRefusal.NotConfigured,
+                $"No SSH private key is configured for login '{login}'. Add a key file named "
+                + $"'{login}' under JitSsh__PrivateKeyDirectory, or set a shared "
+                + "JitSsh__PrivateKeyPath.");
+        }
+
+        return await SshTerminalSession.ConnectAsync(
+            permission, callerUserId, login, pem, keyPath, _options, columns, rows, _live, logger,
+            cancellationToken);
     }
 
     public async Task CloseAsync(Guid permissionId, string reason)
