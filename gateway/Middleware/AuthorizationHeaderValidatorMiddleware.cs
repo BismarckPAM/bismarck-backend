@@ -20,6 +20,12 @@ public sealed class AuthorizationHeaderValidatorMiddleware
 {
     private const string BearerScheme = "Bearer ";
 
+    /// <summary>
+    /// The brokered-terminal route, the one place a token may arrive as a query
+    /// parameter because a WebSocket handshake cannot carry a header.
+    /// </summary>
+    private const string TerminalPathPrefix = "/api/jit/terminal";
+
     private readonly RequestDelegate _next;
     private readonly ILogger<AuthorizationHeaderValidatorMiddleware> _logger;
 
@@ -62,15 +68,13 @@ public sealed class AuthorizationHeaderValidatorMiddleware
             return;
         }
 
-        var authorization = context.Request.Headers.Authorization.ToString();
-        if (string.IsNullOrWhiteSpace(authorization)
-            || !authorization.StartsWith(BearerScheme, StringComparison.OrdinalIgnoreCase))
+        var token = ResolveToken(context, path);
+        if (string.IsNullOrWhiteSpace(token))
         {
             await RejectAsync(context, "Missing or malformed Authorization header.");
             return;
         }
 
-        var token = authorization[BearerScheme.Length..].Trim();
         if (!IsWellFormedJwt(token))
         {
             await RejectAsync(context, "Authorization header is not a well-formed JWT.");
@@ -78,6 +82,36 @@ public sealed class AuthorizationHeaderValidatorMiddleware
         }
 
         await _next(context);
+    }
+
+    /// <summary>
+    /// Extracts the bearer token.
+    ///
+    /// WebSocket handshakes are the exception: the browser WebSocket API cannot
+    /// set an Authorization header, so the token has to travel as the
+    /// <c>access_token</c> query parameter on the terminal endpoint. Without this
+    /// every brokered-terminal connection was rejected 401 before it ever reached
+    /// the Authorization Service. Only the brokered terminal route opts in, so
+    /// this does not weaken the header requirement everywhere else.
+    /// </summary>
+    private static string? ResolveToken(HttpContext context, string path)
+    {
+        if (context.WebSockets.IsWebSocketRequest
+            && path.StartsWith(TerminalPathPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var fromQuery = context.Request.Query["access_token"].ToString();
+            if (!string.IsNullOrWhiteSpace(fromQuery))
+                return fromQuery.Trim();
+        }
+
+        var authorization = context.Request.Headers.Authorization.ToString();
+        if (string.IsNullOrWhiteSpace(authorization)
+            || !authorization.StartsWith(BearerScheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return authorization[BearerScheme.Length..].Trim();
     }
 
     private static bool IsWellFormedJwt(string token)
