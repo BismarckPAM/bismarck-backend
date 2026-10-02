@@ -428,3 +428,11 @@ FodyWeavers.xsd
 *.msm
 *.msp
 *.zip
+
+# SSH keys for the brokered JIT terminal. This directory is bind-mounted into
+# the authorization_svc container (JitSsh__PrivateKeyDirectory). It must never
+# be committed - a private key in git history stays in git history.
+jit-keys/
+*.pem
+*.key
+id_rsa*
