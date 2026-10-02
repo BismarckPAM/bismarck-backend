@@ -40,7 +40,18 @@ builder.Services.AddAuthorization();
 // Application Services & Controllers
 builder.Services.AddControllers();
 builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddHostedService<KafkaAuditConsumer>();
+
+// The Kafka consumer is registered only when enabled, matching the Analytics
+// Service (BIS-402). Integration tests switch it off so the real host can start
+// without a broker - the Audit rows they query are seeded straight into the
+// database, which is exactly what this consumer would otherwise write.
+// Normal deployments keep the default (enabled), so production behaviour is
+// unchanged.
+if (builder.Configuration.GetValue("Kafka:Enabled", true))
+{
+    builder.Services.AddHostedService<KafkaAuditConsumer>();
+}
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -67,3 +78,10 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+/// <summary>
+/// Exposed so the integration tests can use <c>WebApplicationFactory&lt;Program&gt;</c>,
+/// matching the pattern already used by the Analytics (BIS-402), Approval and
+/// Resource test suites.
+/// </summary>
+public partial class Program { }
