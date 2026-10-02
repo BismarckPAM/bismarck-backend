@@ -118,6 +118,71 @@ public class UserService(
         return await ProjectUser(dbContext.Users.IgnoreQueryFilters().Where(item => item.Id == id), cancellationToken);
     }
 
+    public async Task<IReadOnlyList<UserResponse>> GetAllIncludingInactiveAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // IgnoreQueryFilters() lifts the `User.IsActive` global query filter so the
+        // Admin User Directory can see deactivated accounts. The default GetAllAsync
+        // keeps the filter, so existing consumers (Access Check) are unchanged.
+        return await dbContext.Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .OrderBy(user => user.FullName)
+            .ProjectTo<UserResponse>(mapper.ConfigurationProvider)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<UserResponse> UpdateStatusAsync(
+        Guid id,
+        UpdateUserStatusRequest request,
+        string? actorUserId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // IgnoreQueryFilters() is required here: a deactivated account is exactly the
+        // row an administrator needs to find again in order to reactivate it.
+        var user = await dbContext.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
+            ?? throw new NotFoundException($"User '{id}' was not found.");
+
+        // Idempotent: applying the status an account already has is a no-op that
+        // returns 200, so a retried UI request can never produce a spurious failure.
+        if (user.IsActive == request.IsActive)
+            return await ProjectUser(dbContext.Users.IgnoreQueryFilters().Where(item => item.Id == id), cancellationToken);
+
+        user.IsActive = request.IsActive;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var response = await ProjectUser(dbContext.Users.IgnoreQueryFilters().Where(item => item.Id == id), cancellationToken);
+
+        // Same channel and event schema as user-created / user-updated — account
+        // status changes stay auditable without inventing a new Kafka contract.
+        await domainEventPublisher.PublishAsync(
+            "identity-events",
+            new SecurityEvent<object>(
+            Guid.NewGuid(),
+            "user-status-changed",
+            DateTimeOffset.UtcNow,
+            actorUserId ?? response.Id.ToString(),
+            response.Id.ToString(),
+            response.IsActive ? "USER_ACTIVATE" : "USER_DEACTIVATE",
+            "SUCCESS",
+            new
+            {
+                TargetUserId = response.Id,
+                response.FullName,
+                response.Email,
+                response.RoleId,
+                response.Role,
+                response.DepartmentId,
+                response.Department,
+                response.IsActive,
+                response.CreatedAt
+            }), cancellationToken);
+
+        return response;
+    }
+
     private async Task ValidateReferencesAsync(Guid roleId, Guid departmentId, CancellationToken cancellationToken)
     {
         if (!await dbContext.Roles.AnyAsync(role => role.Id == roleId, cancellationToken))

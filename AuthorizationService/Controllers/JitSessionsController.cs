@@ -28,6 +28,13 @@ public sealed class JitSessionsController(
     IAuthorizationEventPublisher eventPublisher,
     ISystemClock clock) : ControllerBase
 {
+    /// <summary>
+    /// Roles allowed to enumerate every JIT session and to revoke any of them.
+    /// A Security Admin is deliberately NOT an approver — that authority stays
+    /// with the Approval Service's configured approver roles.
+    /// </summary>
+    private static readonly string[] PrivilegedRoles = ["Admin", "Security Admin"];
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<JitSessionResponse>>> GetSessions(
         [FromQuery] bool activeOnly,
@@ -143,8 +150,13 @@ public sealed class JitSessionsController(
             ?? User.FindFirst("role")?.Value
             ?? Request.Headers["X-User-Role"].FirstOrDefault();
 
-        var isAdmin = User.IsInRole("Admin")
-            || string.Equals(roleClaim, "Admin", StringComparison.OrdinalIgnoreCase);
+        // Admin OR Security Admin may see every session and manually revoke any of
+        // them. Exact allow-list on normalized values — never a substring test like
+        // role.Contains("admin"), which would wrongly privilege unrelated roles.
+        var isAdmin = PrivilegedRoles.Any(privileged => User.IsInRole(privileged))
+            || (roleClaim is not null
+                && PrivilegedRoles.Any(privileged =>
+                    string.Equals(privileged.Trim(), roleClaim.Trim(), StringComparison.OrdinalIgnoreCase)));
 
         var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("sub")?.Value
