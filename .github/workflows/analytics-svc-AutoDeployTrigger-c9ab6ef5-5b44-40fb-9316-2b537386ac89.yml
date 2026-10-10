@@ -1,28 +1,28 @@
+
 name: Trigger auto deployment for analytics-svc
 
-# When this action will be executed
 on:
-  # Automatically trigger it when detected changes in repo
   push:
-    branches: 
-      [ deploy/production ]
+    branches:
+      - deploy/production
     paths:
-    - '**'
-    - '.github/workflows/analytics-svc-AutoDeployTrigger-c9ab6ef5-5b44-40fb-9316-2b537386ac89.yml'
+      - 'Analytics/**'
+      - 'BuildingBlocks/**'
+      - '.github/workflows/analytics-svc-AutoDeployTrigger-c9ab6ef5-5b44-40fb-9316-2b537386ac89.yml'
 
-  # Allow manual trigger 
-  workflow_dispatch:      
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions: 
-      id-token: write #This is required for requesting the OIDC JWT Token
-      contents: read #Required when GH token is used to authenticate with private repo
+
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout to the branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Azure Login
         uses: azure/login@v2
@@ -35,15 +35,10 @@ jobs:
         uses: azure/container-apps-deploy-action@v2
         with:
           appSourcePath: ${{ github.workspace }}
-          _dockerfilePathKey_: _dockerfilePath_
-          _targetLabelKey_: _targetLabel_
+          dockerfilePath: Analytics/Dockerfile
           registryUrl: bismarckregistry.azurecr.io
           registryUsername: ${{ secrets.ANALYTICSSVC_REGISTRY_USERNAME }}
           registryPassword: ${{ secrets.ANALYTICSSVC_REGISTRY_PASSWORD }}
           containerAppName: analytics-svc
           resourceGroup: bismarck-pam-rg
           imageToBuild: bismarckregistry.azurecr.io/analytics-svc:${{ github.sha }}
-          _buildArgumentsKey_: |
-            _buildArgumentsValues_
-
-
