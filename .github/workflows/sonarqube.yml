@@ -37,3 +37,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # 4. Install SonarScanner CLI tool
+      - name: Install SonarScanner
+        run: dotnet tool install --global dotnet-sonarscanner
+
