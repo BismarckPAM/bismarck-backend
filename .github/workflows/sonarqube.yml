@@ -41,3 +41,7 @@ jobs:
       - name: Install SonarScanner
         run: dotnet tool install --global dotnet-sonarscanner
 
+      # 5. Restore dependencies
+      - name: Restore Solution Dependencies
+        run: dotnet restore bismarck-backend.sln
+
