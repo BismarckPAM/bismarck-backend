@@ -41,9 +41,12 @@ jobs:
       - name: Install SonarScanner
         run: dotnet tool install --global dotnet-sonarscanner
 
-      # 5. Restore dependencies
-      - name: Restore Solution Dependencies
-        run: dotnet restore bismarck-backend.sln
+      # 5. Restore service dependencies
+      - name: Restore Service Dependencies
+        run: |
+          for service in identity resource AuthorizationService Approval Audit Notification Analytics gateway; do
+            dotnet restore "./$service"
+          done
 
       # 6. Begin SonarQube Scan
       - name: Begin SonarQube Analysis
@@ -61,19 +64,23 @@ jobs:
 
       # 7. Build all microservices
       - name: Build All Services
-        run: dotnet build bismarck-backend.sln --no-restore --configuration Release
+        run: |
+          for service in identity resource AuthorizationService Approval Audit Notification Analytics gateway; do
+            dotnet build "./$service" --no-restore --configuration Release
+          done
 
       # 8. Run tests, generate OpenCover XML reports, and output TRX test results
       - name: Run Tests & Collect Coverage
         continue-on-error: true # Ensures scan still uploads even if an assertion fails
         run: |
-          dotnet test bismarck-backend.sln \
-            --configuration Release \
-            --no-build \
-            --logger "trx" \
-            --collect:"XPlat Code Coverage" \
-            --results-directory ./TestResults \
-            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+          find . -type f -name '*Tests.csproj' -print0 | while IFS= read -r -d '' test_project; do
+            dotnet test "$test_project" \
+              --configuration Release \
+              --logger "trx" \
+              --collect:"XPlat Code Coverage" \
+              --results-directory ./TestResults \
+              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+          done
 
       # 9. End SonarQube Scan (Uploads coverage and code metrics to your EC2 instance)
       - name: End SonarQube Analysis
