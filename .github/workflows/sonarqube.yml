@@ -11,3 +11,8 @@ on:
       - main
       - deploy/production
   workflow_dispatch: # Adds manual "Run workflow" button in GitHub Actions UI for live demo
+
+jobs:
+  sonar-analysis:
+    name: SonarQube Analysis
+
