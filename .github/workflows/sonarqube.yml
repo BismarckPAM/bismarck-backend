@@ -63,3 +63,15 @@ jobs:
       - name: Build All Services
         run: dotnet build bismarck-backend.sln --no-restore --configuration Release
 
+      # 8. Run tests, generate OpenCover XML reports, and output TRX test results
+      - name: Run Tests & Collect Coverage
+        continue-on-error: true # Ensures scan still uploads even if an assertion fails
+        run: |
+          dotnet test bismarck-backend.sln \
+            --configuration Release \
+            --no-build \
+            --logger "trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
