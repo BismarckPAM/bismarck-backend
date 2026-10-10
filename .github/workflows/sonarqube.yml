@@ -15,4 +15,5 @@ on:
 jobs:
   sonar-analysis:
     name: SonarQube Analysis
+    runs-on: ubuntu-latest
 
