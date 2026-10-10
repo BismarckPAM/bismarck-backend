@@ -1,0 +1,13 @@
+name: SonarQube Code Quality & Coverage
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - deploy/production
+  pull_request:
+    branches:
+      - main
+      - deploy/production
+  workflow_dispatch: # Adds manual "Run workflow" button in GitHub Actions UI for live demo
