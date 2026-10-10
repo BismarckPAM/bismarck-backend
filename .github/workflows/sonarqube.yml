@@ -59,3 +59,7 @@ jobs:
             /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
             /d:sonar.coverage.exclusions="**/*Tests*/**,**/Migrations/**"
 
+      # 7. Build all microservices
+      - name: Build All Services
+        run: dotnet build bismarck-backend.sln --no-restore --configuration Release
+
