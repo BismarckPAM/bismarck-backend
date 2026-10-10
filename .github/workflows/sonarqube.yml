@@ -17,3 +17,6 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
 
+    steps:
+      # 1. Checkout full git history (mandatory for Sonar line blame & new code detection)
+
