@@ -1,16 +1,28 @@
 using AuthorizationService.Data;
 using AuthorizationService.DTOs;
 using AuthorizationService.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace AuthorizationService.Controllers;
 
+/// <summary>
+/// Access-policy administration.
+///
+/// Reads stay available to any authenticated caller (the Policy simulator and
+/// the Access Check flow both list policies), but creating, editing and
+/// deactivating a policy changes what access the platform grants, so those are
+/// restricted to Admin / Security Admin. Previously every verb on this
+/// controller was reachable by anyone who could reach the port.
+/// </summary>
 [ApiController]
+[Authorize]
 [Route("authz/policies")]
 public sealed class AccessPoliciesController(AuthorizationDbContext dbContext) : ControllerBase
 {
     [HttpPost]
+    [Authorize(Roles = "Admin,Security Admin")]
     public async Task<ActionResult<AccessPolicyResponse>> Create(
         AccessPolicyRequest request,
         CancellationToken cancellationToken)
@@ -75,6 +87,7 @@ public sealed class AccessPoliciesController(AuthorizationDbContext dbContext) :
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin,Security Admin")]
     public async Task<ActionResult<AccessPolicyResponse>> Update(
         Guid id,
         AccessPolicyRequest request,
@@ -111,6 +124,7 @@ public sealed class AccessPoliciesController(AuthorizationDbContext dbContext) :
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin,Security Admin")]
     public async Task<ActionResult<AccessPolicyResponse>> Delete(
         Guid id,
         CancellationToken cancellationToken)
