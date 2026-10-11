@@ -27,8 +27,6 @@ public sealed class SmtpEmailSender(
     private readonly string _from = configuration["Smtp:From"] ?? "no-reply@bismarck.local";
     private readonly string? _username = configuration["Smtp:Username"];
     private readonly string? _password = configuration["Smtp:Password"];
-    private readonly bool _useSsl = bool.TryParse(configuration["Smtp:UseSsl"], out var ssl) && ssl;
-
     public Task SendActivationEmailAsync(
         string toEmail, string fullName, string temporaryPassword, CancellationToken cancellationToken = default)
     {
