@@ -15,11 +15,13 @@ public sealed class ExceptionHandlerMiddleware(
         catch (Exception exception)
         {
             logger.LogError(exception, "Unhandled exception while processing request.");
-            await WriteErrorResponseAsync(context);
+            await WriteErrorResponseAsync(context, context.RequestAborted);
         }
     }
 
-    private static async Task WriteErrorResponseAsync(HttpContext context)
+    private static async Task WriteErrorResponseAsync(
+        HttpContext context,
+        CancellationToken cancellationToken)
     {
         if (context.Response.HasStarted)
             return;
@@ -31,6 +33,6 @@ public sealed class ExceptionHandlerMiddleware(
         await context.Response.WriteAsync(JsonSerializer.Serialize(new
         {
             message = "An unexpected error occurred."
-        }));
+        }), cancellationToken);
     }
 }
