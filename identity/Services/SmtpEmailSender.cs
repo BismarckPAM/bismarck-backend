@@ -79,7 +79,7 @@ public sealed class SmtpEmailSender(
         try
         {
             using var message = new MailMessage(_from, toEmail, subject, body);
-            using var client = new SmtpClient(_host, _port) { EnableSsl = _useSsl };
+            using var client = new SmtpClient(_host, _port) { EnableSsl = true };
             if (!string.IsNullOrWhiteSpace(_username))
                 client.Credentials = new NetworkCredential(_username, _password);
 
