@@ -16,11 +16,14 @@ public class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<ExceptionH
         catch (Exception exception)
         {
             logger.LogError(exception, "Unhandled request exception");
-            await WriteErrorResponseAsync(context, exception);
+            await WriteErrorResponseAsync(context, exception, context.RequestAborted);
         }
     }
 
-    private static async Task WriteErrorResponseAsync(HttpContext context, Exception exception)
+    private static async Task WriteErrorResponseAsync(
+        HttpContext context,
+        Exception exception,
+        CancellationToken cancellationToken)
     {
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = exception switch
@@ -35,6 +38,8 @@ public class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<ExceptionH
             ? validationException.Errors.Select(error => new { error.PropertyName, error.ErrorMessage })
             : new[] { new { PropertyName = string.Empty, ErrorMessage = exception.Message } };
 
-        await context.Response.WriteAsync(JsonSerializer.Serialize(new { errors = message }));
+        await context.Response.WriteAsync(
+            JsonSerializer.Serialize(new { errors = message }),
+            cancellationToken);
     }
 }
