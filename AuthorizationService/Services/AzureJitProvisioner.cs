@@ -172,7 +172,7 @@ public sealed class AzureJitProvisioner : IAzureJitProvisioner
         return payload?.Id;
     }
 
-    private string ResolveRoleDefinitionId(int requestedLevel)
+    private static string ResolveRoleDefinitionId(int requestedLevel)
         => requestedLevel >= 3 ? VirtualMachineContributorRoleId : VirtualMachineUserLoginRoleId;
 
     /// <summary>
