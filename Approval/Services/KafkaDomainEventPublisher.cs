@@ -6,6 +6,10 @@ namespace Approval.Service.Services;
 
 public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposable
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
     private readonly IProducer<string, string> producer;
     private readonly ILogger<KafkaDomainEventPublisher> logger;
     private readonly string defaultTopic;
@@ -33,10 +37,7 @@ public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposab
     {
         try
         {
-            var json = JsonSerializer.Serialize(message, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
+            var json = JsonSerializer.Serialize(message, JsonOptions);
 
             await producer.ProduceAsync(
                 string.IsNullOrWhiteSpace(topic) ? defaultTopic : topic,

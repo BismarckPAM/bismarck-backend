@@ -83,12 +83,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-app.Run();
+await app.RunAsync();
 
 app.UseRouting();
 app.UseHttpMetrics(); 
 app.MapMetrics();
 
 public partial class Program { }
-
 

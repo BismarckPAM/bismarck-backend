@@ -56,6 +56,11 @@ public sealed class JitTerminalController(
 
         var login = _options.ResolveLogin(userEmail ?? permission.UserEmail);
         var hasKey = login is not null && _options.TryResolveKey(login, out _, out _);
+        string? unavailableReason = broker.IsConfigured
+            ? hasKey
+                ? null
+                : $"No SSH private key is configured for login '{login}'."
+            : "The brokered terminal is not configured on the Authorization Service.";
 
         return Ok(new
         {
@@ -65,11 +70,7 @@ public sealed class JitTerminalController(
             keyAvailable = hasKey,
             // One reason the UI can show verbatim, so the operator does not have to
             // read container logs to find out which secret is missing.
-            unavailableReason = broker.IsConfigured
-                ? hasKey
-                    ? null
-                    : $"No SSH private key is configured for login '{login}'."
-                : "The brokered terminal is not configured on the Authorization Service."
+            unavailableReason
         });
     }
 
@@ -204,7 +205,7 @@ private async Task PumpAsync(
                     case "i":
                         if (frame.TryGetProperty("s", out var input) && input.GetString() is { } text)
                         {
-                            session.Write(text);
+                            await session.WriteAsync(text, cancellationToken);
                         }
                         else if (frame.TryGetProperty("c", out var c) && frame.TryGetProperty("r", out var r))
                         {
@@ -251,7 +252,7 @@ private async Task PumpAsync(
         CancellationToken cancellationToken)
     {
         using var payload = new MemoryStream();
-        payload.Write(buffer, 0, first.Count);
+        await payload.WriteAsync(buffer.AsMemory(0, first.Count), cancellationToken);
 
         var result = first;
         while (!result.EndOfMessage)
@@ -260,7 +261,7 @@ private async Task PumpAsync(
             if (result.MessageType == WebSocketMessageType.Close)
                 break;
 
-            payload.Write(buffer, 0, result.Count);
+            await payload.WriteAsync(buffer.AsMemory(0, result.Count), cancellationToken);
         }
 
         return Encoding.UTF8.GetString(payload.ToArray());

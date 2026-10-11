@@ -35,6 +35,10 @@ public record ApprovalGrantedMetadata(
 
 public class ApprovalGrantedConsumer : BackgroundService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
     private readonly IConfiguration _configuration;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ApprovalGrantedConsumer> _logger;
@@ -81,8 +85,9 @@ public class ApprovalGrantedConsumer : BackgroundService
                 }
 
                 // Deserialize SecurityEvent<JsonElement>
-                var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var secEvent = JsonSerializer.Deserialize<SecurityEvent<JsonElement>>(consumeResult.Message.Value, jsonOptions);
+                var secEvent = JsonSerializer.Deserialize<SecurityEvent<JsonElement>>(
+                    consumeResult.Message.Value,
+                    JsonOptions);
 
                 if (secEvent is null || secEvent.EventId == Guid.Empty)
                 {
@@ -93,7 +98,7 @@ public class ApprovalGrantedConsumer : BackgroundService
 
                 // Read approval metadata
                 var metadata = JsonSerializer.Deserialize<ApprovalGrantedMetadata>(
-                    secEvent.Metadata.GetRawText(), jsonOptions);
+                    secEvent.Metadata.GetRawText(), JsonOptions);
 
                 // Extract ApprovalId (fallback to EventId if not explicitly placed in metadata)
                 var approvalId = metadata?.ApprovalId ?? secEvent.EventId;

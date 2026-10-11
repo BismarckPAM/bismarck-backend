@@ -14,7 +14,7 @@ public interface IJitTerminalSession : IAsyncDisposable
     Task<string> ReadAsync(CancellationToken cancellationToken);
 
     /// <summary>Forwards keystrokes/control sequences to the remote shell.</summary>
-    void Write(string data);
+    Task WriteAsync(string data, CancellationToken cancellationToken);
 
     /// <summary>Propagates a browser terminal resize to the remote PTY.</summary>
     void Resize(int columns, int rows);

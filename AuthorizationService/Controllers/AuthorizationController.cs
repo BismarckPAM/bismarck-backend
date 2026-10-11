@@ -20,17 +20,26 @@ public sealed class AuthorizationController(
     AuthorizationDbContext dbContext,
     ISystemClock clock) : ControllerBase
 {
+    [NonAction]
+    public Task<IActionResult> RevokePermission(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return RevokePermission(id, null, null, cancellationToken);
+    }
 
     //MANUAL REVOKE 
 
     [HttpPost("permissions/{id:guid}/revoke")]
     public async Task<IActionResult> RevokePermission(
         [FromRoute] Guid id,
+        [FromHeader(Name = "X-User-Role")] string? userRole,
+        [FromHeader(Name = "X-User-Id")] string? userId,
         CancellationToken cancellationToken)
     {
         var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value
             ?? User.FindFirst("role")?.Value
-            ?? Request.Headers["X-User-Role"].FirstOrDefault();
+            ?? userRole;
 
         bool isAdmin = User.IsInRole("Admin") 
             || string.Equals(roleClaim, "Admin", StringComparison.OrdinalIgnoreCase);
@@ -44,7 +53,7 @@ public sealed class AuthorizationController(
         var adminIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("sub")?.Value
             ?? User.FindFirst("userId")?.Value
-            ?? Request.Headers["X-User-Id"].FirstOrDefault();
+            ?? userId;
 
         Guid? adminId = Guid.TryParse(adminIdClaim, out var parsedAdminId) ? parsedAdminId : null;
 
@@ -111,7 +120,7 @@ public sealed class AuthorizationController(
 
     [HttpPost("check")]
     public async Task<ActionResult<AuthorizationDecisionResult>> Check(
-        AuthorizationCheckRequest request,
+        [FromBody] AuthorizationCheckRequest request,
         CancellationToken cancellationToken)
     {
         var userTask = identityServiceClient.GetUserRoleAsync(

@@ -9,7 +9,6 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISystemClock _clock;
-    private readonly IConfiguration _configuration;
     private readonly ILogger<TemporaryPermissionExpirationWorker> _logger;
     private readonly IAuthorizationEventPublisher _eventPublisher;
     private readonly IAzureJitProvisioner _provisioner;
@@ -29,7 +28,6 @@ public class TemporaryPermissionExpirationWorker : BackgroundService
     {
         _scopeFactory = scopeFactory;
         _clock = clock;
-        _configuration = configuration;
         _logger = logger;
         _eventPublisher = eventPublisher;
         _provisioner = provisioner;

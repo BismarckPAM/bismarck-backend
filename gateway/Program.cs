@@ -49,4 +49,4 @@ app.UseMiddleware<AuthorizationHeaderValidatorMiddleware>();
 app.MapHealthChecks("/health");
 app.MapReverseProxy();
 
-app.Run();
+await app.RunAsync();
