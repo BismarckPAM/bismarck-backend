@@ -16,6 +16,7 @@ public sealed class ApprovalService(
     IIdentityContextClient? identityContextClient = null,
     IResourceContextClient? resourceContextClient = null) : IApproverAuthorizationService
 {
+        private const string ElevatedAccessAction = "ELEVATED_ACCESS";
     public async Task<ApprovalRequestResponse> CreateAsync(
         CreateApprovalRequestRequest request,
         CancellationToken cancellationToken = default)
@@ -47,7 +48,7 @@ public sealed class ApprovalService(
                 DateTimeOffset.UtcNow,
                 requesterUserId,
                 approvalRequest.ResourceId,
-                "ELEVATED_ACCESS",
+                ElevatedAccessAction,
                 "REQUESTED",
                 new
                 {
@@ -112,7 +113,7 @@ public sealed class ApprovalService(
                 DateTimeOffset.UtcNow,
                 approvedRequest.ReviewedByUserId ?? reviewerUserId,
                 approvedRequest.ResourceId,
-                "ELEVATED_ACCESS",
+                ElevatedAccessAction,
                 "APPROVED",
                 payload
             ),
@@ -151,7 +152,7 @@ public sealed class ApprovalService(
                 DateTimeOffset.UtcNow,
                 reviewerUserId,
                 rejectedRequest.ResourceId,
-                "ELEVATED_ACCESS",
+                ElevatedAccessAction,
                 "REJECTED",
                 new
                 {
@@ -268,7 +269,7 @@ public sealed class ApprovalService(
     /// </summary>
     private async Task EnrichAsync(ApprovalRequest approvalRequest, CancellationToken cancellationToken)
     {
-        approvalRequest.Action ??= "ELEVATED_ACCESS";
+        approvalRequest.Action ??= ElevatedAccessAction;
 
         if (identityContextClient is not null)
         {
