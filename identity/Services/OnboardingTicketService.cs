@@ -32,9 +32,7 @@ public sealed class OnboardingTicketService(
     IEmailSender emailSender,
     ILogger<OnboardingTicketService> logger) : IOnboardingTicketService
 {
-    private const string AllowedPasswordChars =
-        "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-    private const int TemporaryPasswordLength = 16;
+    private const int TemporaryPasswordBytes = 24;
 
     public async Task<CreateOnboardingTicketResponse> CreateAsync(
         CreateOnboardingTicketRequest request, CancellationToken cancellationToken = default)
@@ -191,12 +189,11 @@ public sealed class OnboardingTicketService(
 
     private (string Password, string Hash) GenerateTemporaryPassword()
     {
-        var bytes = RandomNumberGenerator.GetBytes(TemporaryPasswordLength);
-        var chars = new char[TemporaryPasswordLength];
-        for (var i = 0; i < TemporaryPasswordLength; i++)
-            chars[i] = AllowedPasswordChars[bytes[i] % AllowedPasswordChars.Length];
-
-        var password = new string(chars);
+        var password = Convert.ToBase64String(
+                RandomNumberGenerator.GetBytes(TemporaryPasswordBytes))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
         return (password, passwordHasher.Hash(password));
     }
 
