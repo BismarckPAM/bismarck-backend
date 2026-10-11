@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Identity.Service.DTOs;
 
 /// <summary>
@@ -13,5 +15,6 @@ namespace Identity.Service.DTOs;
 public class UpdateUserStatusRequest
 {
     /// <summary>Target account state: true = active (can sign in), false = deactivated.</summary>
+    [JsonRequired]
     public bool IsActive { get; set; }
 }
