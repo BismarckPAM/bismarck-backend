@@ -38,17 +38,19 @@ public sealed class JitSessionsController(
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<JitSessionResponse>>> GetSessions(
         [FromQuery] bool activeOnly,
+        [FromHeader(Name = "X-User-Role")] string? userRole,
+        [FromHeader(Name = "X-User-Id")] string? headerUserId,
         CancellationToken cancellationToken)
     {
-        var (userId, isAdmin) = ResolveCaller();
+        var (callerId, isAdmin) = ResolveCaller(userRole, headerUserId);
 
         var query = dbContext.TemporaryPermissions.AsNoTracking().AsQueryable();
         if (!isAdmin)
         {
-            if (userId is null)
+            if (callerId is null)
                 return Forbid();
 
-            query = query.Where(p => p.UserId == userId.Value);
+            query = query.Where(p => p.UserId == callerId.Value);
         }
 
         if (activeOnly)
@@ -67,9 +69,11 @@ public sealed class JitSessionsController(
     public async Task<IActionResult> Revoke(
         [FromRoute] Guid id,
         [FromBody] RevokeJitSessionRequest? request,
+        [FromHeader(Name = "X-User-Role")] string? userRole,
+        [FromHeader(Name = "X-User-Id")] string? headerUserId,
         CancellationToken cancellationToken)
     {
-        var (adminId, isAdmin) = ResolveCaller();
+        var (adminId, isAdmin) = ResolveCaller(userRole, headerUserId);
 
         if (!isAdmin)
             return Forbid();
@@ -144,11 +148,11 @@ public sealed class JitSessionsController(
         return Ok(ToResponse(permission, now));
     }
 
-    private (Guid? UserId, bool IsAdmin) ResolveCaller()
+    private (Guid? UserId, bool IsAdmin) ResolveCaller(string? userRole, string? userId)
     {
         var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value
             ?? User.FindFirst("role")?.Value
-            ?? Request.Headers["X-User-Role"].FirstOrDefault();
+            ?? userRole;
 
         // Admin OR Security Admin may see every session and manually revoke any of
         // them. Exact allow-list on normalized values — never a substring test like
@@ -161,10 +165,10 @@ public sealed class JitSessionsController(
         var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("sub")?.Value
             ?? User.FindFirst("userId")?.Value
-            ?? Request.Headers["X-User-Id"].FirstOrDefault();
+            ?? userId;
 
-        Guid? userId = Guid.TryParse(idClaim, out var parsed) ? parsed : null;
-        return (userId, isAdmin);
+        Guid? callerId = Guid.TryParse(idClaim, out var parsed) ? parsed : null;
+        return (callerId, isAdmin);
     }
 
     private static JitSessionResponse ToResponse(TemporaryPermission permission, DateTimeOffset now)
