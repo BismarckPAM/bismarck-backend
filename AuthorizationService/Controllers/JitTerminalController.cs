@@ -204,7 +204,7 @@ private async Task PumpAsync(
                     case "i":
                         if (frame.TryGetProperty("s", out var input) && input.GetString() is { } text)
                         {
-                            session.Write(text);
+                            await session.WriteAsync(text, cancellationToken);
                         }
                         else if (frame.TryGetProperty("c", out var c) && frame.TryGetProperty("r", out var r))
                         {
