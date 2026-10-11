@@ -252,7 +252,7 @@ private async Task PumpAsync(
         CancellationToken cancellationToken)
     {
         using var payload = new MemoryStream();
-        payload.Write(buffer, 0, first.Count);
+        await payload.WriteAsync(buffer.AsMemory(0, first.Count), cancellationToken);
 
         var result = first;
         while (!result.EndOfMessage)
@@ -261,7 +261,7 @@ private async Task PumpAsync(
             if (result.MessageType == WebSocketMessageType.Close)
                 break;
 
-            payload.Write(buffer, 0, result.Count);
+            await payload.WriteAsync(buffer.AsMemory(0, result.Count), cancellationToken);
         }
 
         return Encoding.UTF8.GetString(payload.ToArray());
