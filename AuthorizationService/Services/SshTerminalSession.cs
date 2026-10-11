@@ -77,14 +77,14 @@ internal sealed class SshTerminalSession : IJitTerminalSession, JitTerminalBroke
     }
 
     /// <summary>Forwards keystrokes or control sequences to the remote shell.</summary>
-    public void Write(string data)
+    public async Task WriteAsync(string data, CancellationToken cancellationToken)
     {
         if (Volatile.Read(ref _closed) == 1)
             return;
 
         try
         {
-            _shell.Write(data);
+            await _shell.WriteAsync(Encoding.UTF8.GetBytes(data), cancellationToken);
         }
         catch (Exception ex)
         {
