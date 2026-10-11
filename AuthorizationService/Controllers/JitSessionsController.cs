@@ -136,7 +136,7 @@ public sealed class JitSessionsController(
                 RevokedAt = now,
                 Reason = string.IsNullOrWhiteSpace(request?.Reason)
                     ? "Manual revocation by administrator"
-                    : request!.Reason
+                    : request.Reason
             });
 
         await eventPublisher.PublishAsync(KafkaTopics.JitRevoked, revokedEvent, cancellationToken);
@@ -167,7 +167,7 @@ public sealed class JitSessionsController(
         return (userId, isAdmin);
     }
 
-    private JitSessionResponse ToResponse(TemporaryPermission permission, DateTimeOffset now)
+    private static JitSessionResponse ToResponse(TemporaryPermission permission, DateTimeOffset now)
     {
         var remaining = permission.Status == TemporaryPermissionStatus.ACTIVE
             ? (int)Math.Max(0, (permission.ExpiresAt - now).TotalSeconds)
