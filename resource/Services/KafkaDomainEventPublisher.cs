@@ -6,6 +6,10 @@ namespace Resource.Service.Services;
 
 public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposable
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
     private readonly IProducer<string, string> producer;
     private readonly ILogger<KafkaDomainEventPublisher> logger;
     private readonly string defaultTopic;
@@ -27,10 +31,7 @@ public sealed class KafkaDomainEventPublisher : IDomainEventPublisher, IDisposab
         SecurityEvent<T> message,
         CancellationToken cancellationToken = default)
     {
-        var json = JsonSerializer.Serialize(message, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var json = JsonSerializer.Serialize(message, JsonOptions);
         var targetTopic = string.IsNullOrWhiteSpace(topic) ? defaultTopic : topic;
         await producer.ProduceAsync(targetTopic, new Message<string, string>
         {
