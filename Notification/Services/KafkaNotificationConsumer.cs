@@ -11,6 +11,10 @@ namespace Notification.Service.Services;
 
 public class KafkaNotificationConsumer : BackgroundService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
     private readonly IConfiguration _configuration;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<KafkaNotificationConsumer> _logger;
@@ -88,8 +92,9 @@ public class KafkaNotificationConsumer : BackgroundService
 
                 try
                 {
-                    var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    secEvent = JsonSerializer.Deserialize<SecurityEvent<JsonElement>>(consumeResult.Message.Value, jsonOptions);
+                    secEvent = JsonSerializer.Deserialize<SecurityEvent<JsonElement>>(
+                        consumeResult.Message.Value,
+                        JsonOptions);
 
                     if (secEvent is null || secEvent.EventId == Guid.Empty)
                     {
