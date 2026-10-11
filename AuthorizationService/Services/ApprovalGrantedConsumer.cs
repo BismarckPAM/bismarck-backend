@@ -98,7 +98,7 @@ public class ApprovalGrantedConsumer : BackgroundService
 
                 // Read approval metadata
                 var metadata = JsonSerializer.Deserialize<ApprovalGrantedMetadata>(
-                    secEvent.Metadata.GetRawText(), jsonOptions);
+                    secEvent.Metadata.GetRawText(), JsonOptions);
 
                 // Extract ApprovalId (fallback to EventId if not explicitly placed in metadata)
                 var approvalId = metadata?.ApprovalId ?? secEvent.EventId;
