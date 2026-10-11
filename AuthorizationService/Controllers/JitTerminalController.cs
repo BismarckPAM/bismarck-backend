@@ -56,6 +56,11 @@ public sealed class JitTerminalController(
 
         var login = _options.ResolveLogin(userEmail ?? permission.UserEmail);
         var hasKey = login is not null && _options.TryResolveKey(login, out _, out _);
+        string? unavailableReason = broker.IsConfigured
+            ? hasKey
+                ? null
+                : $"No SSH private key is configured for login '{login}'."
+            : "The brokered terminal is not configured on the Authorization Service.";
 
         return Ok(new
         {
@@ -65,11 +70,7 @@ public sealed class JitTerminalController(
             keyAvailable = hasKey,
             // One reason the UI can show verbatim, so the operator does not have to
             // read container logs to find out which secret is missing.
-            unavailableReason = broker.IsConfigured
-                ? hasKey
-                    ? null
-                    : $"No SSH private key is configured for login '{login}'."
-                : "The brokered terminal is not configured on the Authorization Service."
+            unavailableReason
         });
     }
 
