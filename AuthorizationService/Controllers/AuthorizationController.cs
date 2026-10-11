@@ -111,7 +111,7 @@ public sealed class AuthorizationController(
 
     [HttpPost("check")]
     public async Task<ActionResult<AuthorizationDecisionResult>> Check(
-        AuthorizationCheckRequest request,
+        [FromBody] AuthorizationCheckRequest request,
         CancellationToken cancellationToken)
     {
         var userTask = identityServiceClient.GetUserRoleAsync(

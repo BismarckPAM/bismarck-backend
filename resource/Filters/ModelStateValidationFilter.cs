@@ -20,11 +20,7 @@ public class ModelStateValidationFilter : IActionFilter
                         ? entry.Key[2..]
                         : entry.Key;
 
-                    var errorMessage = propertyName.Equals("criticality", StringComparison.OrdinalIgnoreCase)
-                        ? "Criticality must be one of: LOW, MEDIUM, HIGH, CRITICAL."
-                        : string.IsNullOrWhiteSpace(error.ErrorMessage)
-                            ? "The supplied value is invalid."
-                            : error.ErrorMessage;
+                    var errorMessage = GetErrorMessage(propertyName, error.ErrorMessage);
 
                     return new ValidationFailure(propertyName, errorMessage);
                 }))
@@ -39,5 +35,15 @@ public class ModelStateValidationFilter : IActionFilter
 
     public void OnActionExecuted(ActionExecutedContext context)
     {
+    }
+
+    private static string GetErrorMessage(string propertyName, string errorMessage)
+    {
+        if (propertyName.Equals("criticality", StringComparison.OrdinalIgnoreCase))
+            return "Criticality must be one of: LOW, MEDIUM, HIGH, CRITICAL.";
+
+        return string.IsNullOrWhiteSpace(errorMessage)
+            ? "The supplied value is invalid."
+            : errorMessage;
     }
 }
