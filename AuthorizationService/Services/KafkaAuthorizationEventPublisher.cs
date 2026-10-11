@@ -18,6 +18,10 @@ namespace AuthorizationService.Services;
 /// </summary>
 public sealed class KafkaAuthorizationEventPublisher : IAuthorizationEventPublisher, IDisposable
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
     private const int FailureThreshold = 3;
     private static readonly TimeSpan CircuitOpenDuration = TimeSpan.FromSeconds(15);
 
@@ -61,10 +65,7 @@ public sealed class KafkaAuthorizationEventPublisher : IAuthorizationEventPublis
 
         try
         {
-            var json = JsonSerializer.Serialize(message, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
+            var json = JsonSerializer.Serialize(message, JsonOptions);
 
             var result = await producer.ProduceAsync(topic, new Message<string, string>
             {
