@@ -20,6 +20,13 @@ public sealed class AuthorizationController(
     AuthorizationDbContext dbContext,
     ISystemClock clock) : ControllerBase
 {
+    [NonAction]
+    public Task<IActionResult> RevokePermission(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return RevokePermission(id, null, null, cancellationToken);
+    }
 
     //MANUAL REVOKE 
 

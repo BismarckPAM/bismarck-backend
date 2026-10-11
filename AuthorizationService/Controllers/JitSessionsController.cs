@@ -28,6 +28,23 @@ public sealed class JitSessionsController(
     IAuthorizationEventPublisher eventPublisher,
     ISystemClock clock) : ControllerBase
 {
+    [NonAction]
+    public Task<ActionResult<IReadOnlyList<JitSessionResponse>>> GetSessions(
+        bool activeOnly,
+        CancellationToken cancellationToken)
+    {
+        return GetSessions(activeOnly, null, null, cancellationToken);
+    }
+
+    [NonAction]
+    public Task<IActionResult> Revoke(
+        Guid id,
+        RevokeJitSessionRequest? request,
+        CancellationToken cancellationToken)
+    {
+        return Revoke(id, request, null, null, cancellationToken);
+    }
+
     /// <summary>
     /// Roles allowed to enumerate every JIT session and to revoke any of them.
     /// A Security Admin is deliberately NOT an approver — that authority stays
