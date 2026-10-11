@@ -77,7 +77,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.Run();
+await app.RunAsync();
 
 /// <summary>
 /// Exposed so the integration tests can use <c>WebApplicationFactory&lt;Program&gt;</c>,
