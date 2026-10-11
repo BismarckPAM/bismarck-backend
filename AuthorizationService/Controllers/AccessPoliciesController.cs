@@ -21,6 +21,9 @@ namespace AuthorizationService.Controllers;
 [Route("authz/policies")]
 public sealed class AccessPoliciesController(AuthorizationDbContext dbContext) : ControllerBase
 {
+    private const string DuplicatePolicyMessage =
+        "A policy with the same role, environment, and criticality already exists.";
+
     [HttpPost]
     [Authorize(Roles = "Admin,Security Admin")]
     public async Task<ActionResult<AccessPolicyResponse>> Create(
@@ -31,7 +34,7 @@ public sealed class AccessPoliciesController(AuthorizationDbContext dbContext) :
             return BadRequest(new { message = validationError });
 
         if (await PolicyExistsAsync(values, null, cancellationToken))
-            return BadRequest(new { message = "A policy with the same role, environment, and criticality already exists." });
+            return BadRequest(new { message = DuplicatePolicyMessage });
 
         var policy = new AccessPolicy
         {
@@ -51,7 +54,7 @@ public sealed class AccessPoliciesController(AuthorizationDbContext dbContext) :
         }
         catch (DbUpdateException)
         {
-            return BadRequest(new { message = "A policy with the same role, environment, and criticality already exists." });
+            return BadRequest(new { message = DuplicatePolicyMessage });
         }
 
         return CreatedAtAction(nameof(GetById), new { id = policy.Id }, ToResponse(policy));
@@ -102,7 +105,7 @@ public sealed class AccessPoliciesController(AuthorizationDbContext dbContext) :
             return NotFound(new { message = $"Policy with id '{id}' was not found." });
 
         if (await PolicyExistsAsync(values, id, cancellationToken))
-            return BadRequest(new { message = "A policy with the same role, environment, and criticality already exists." });
+            return BadRequest(new { message = DuplicatePolicyMessage });
 
         policy.Role = values.Role;
         policy.ResourceType = values.ResourceType;
@@ -117,7 +120,7 @@ public sealed class AccessPoliciesController(AuthorizationDbContext dbContext) :
         }
         catch (DbUpdateException)
         {
-            return BadRequest(new { message = "A policy with the same role, environment, and criticality already exists." });
+            return BadRequest(new { message = DuplicatePolicyMessage });
         }
 
         return Ok(ToResponse(policy));
