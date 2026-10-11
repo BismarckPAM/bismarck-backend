@@ -31,6 +31,10 @@ namespace Analytics.Service.Services;
 /// </summary>
 public class KafkaAnalyticsConsumer : BackgroundService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
     private readonly IConfiguration _configuration;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<KafkaAnalyticsConsumer> _logger;
@@ -143,8 +147,7 @@ public class KafkaAnalyticsConsumer : BackgroundService
     {
         try
         {
-            var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var secEvent = JsonSerializer.Deserialize<SecurityEvent<JsonElement>>(payload, jsonOptions);
+            var secEvent = JsonSerializer.Deserialize<SecurityEvent<JsonElement>>(payload, JsonOptions);
 
             if (secEvent is null || secEvent.EventId == Guid.Empty)
             {
