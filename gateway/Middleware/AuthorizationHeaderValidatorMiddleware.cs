@@ -147,6 +147,6 @@ public sealed class AuthorizationHeaderValidatorMiddleware
 
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         context.Response.ContentType = "application/json; charset=utf-8";
-        return context.Response.WriteAsJsonAsync(new { message });
+        return context.Response.WriteAsJsonAsync(new { message }, context.RequestAborted);
     }
 }
