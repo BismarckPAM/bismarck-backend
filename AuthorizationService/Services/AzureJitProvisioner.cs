@@ -249,7 +249,6 @@ public sealed class AzureJitProvisioner : IAzureJitProvisioner
         }
     }
 
-    private sealed record RoleAssignmentDto(string? Id);
     private sealed record GraphUserDto(string? Id);
 }
 
