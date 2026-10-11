@@ -14,11 +14,15 @@ public class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<ExceptionH
         }
         catch (ValidationException exception)
         {
-            await WriteValidationResponseAsync(context, exception);
+            await WriteValidationResponseAsync(context, exception, context.RequestAborted);
         }
         catch (NotFoundException exception)
         {
-            await WriteErrorResponseAsync(context, StatusCodes.Status404NotFound, exception.Message);
+            await WriteErrorResponseAsync(
+                context,
+                StatusCodes.Status404NotFound,
+                exception.Message,
+                context.RequestAborted);
         }
         catch (Exception exception)
         {
@@ -26,13 +30,15 @@ public class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<ExceptionH
             await WriteErrorResponseAsync(
                 context,
                 StatusCodes.Status500InternalServerError,
-                "An unexpected error occurred.");
+                "An unexpected error occurred.",
+                context.RequestAborted);
         }
     }
 
     private static async Task WriteValidationResponseAsync(
         HttpContext context,
-        ValidationException exception)
+        ValidationException exception,
+        CancellationToken cancellationToken)
     {
         var response = new
         {
@@ -43,24 +49,30 @@ public class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<ExceptionH
             })
         };
 
-        await WriteJsonResponseAsync(context, StatusCodes.Status400BadRequest, response);
+        await WriteJsonResponseAsync(
+            context,
+            StatusCodes.Status400BadRequest,
+            response,
+            cancellationToken);
     }
 
     private static async Task WriteErrorResponseAsync(
         HttpContext context,
         int statusCode,
-        string message)
+        string message,
+        CancellationToken cancellationToken)
     {
-        await WriteJsonResponseAsync(context, statusCode, new { message });
+        await WriteJsonResponseAsync(context, statusCode, new { message }, cancellationToken);
     }
 
     private static async Task WriteJsonResponseAsync(
         HttpContext context,
         int statusCode,
-        object response)
+        object response,
+        CancellationToken cancellationToken)
     {
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json";
-        await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+        await context.Response.WriteAsync(JsonSerializer.Serialize(response), cancellationToken);
     }
 }
