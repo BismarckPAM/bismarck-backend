@@ -8,11 +8,12 @@ namespace Notification.Service.Controllers;
 
 [Authorize]
 [ApiController]
+[Route("api/notifications")]
 public class NotificationsController(INotificationService notificationService) : ControllerBase
 {
     // GET /api/notifications?page=1&pageSize=10
     // The user is derived from the JWT — never trusted from the URL.
-    [HttpGet("api/notifications")]
+    [HttpGet]
     [ProducesResponseType(typeof(PagedResult<NotificationResponseDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<NotificationResponseDto>>> GetMyNotifications(
         [FromQuery] NotificationQueryParameters query,
@@ -24,7 +25,7 @@ public class NotificationsController(INotificationService notificationService) :
     }
 
     // POST /api/notifications/{id}/read — persistent mark-as-read.
-    [HttpPost("api/notifications/{id:guid}/read")]
+    [HttpPost("{id:guid}/read")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> MarkAsRead(Guid id, CancellationToken cancellationToken)
@@ -35,7 +36,7 @@ public class NotificationsController(INotificationService notificationService) :
     }
 
     // POST /api/notifications/read-all — mark everything read for the caller.
-    [HttpPost("api/notifications/read-all")]
+    [HttpPost("read-all")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> MarkAllAsRead(CancellationToken cancellationToken)
     {
