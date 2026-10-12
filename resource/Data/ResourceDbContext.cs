@@ -13,6 +13,7 @@ public class ResourceDbContext(DbContextOptions<ResourceDbContext> options) : Db
         modelBuilder.Entity<ResourceModel>(entity =>
         {
             entity.HasKey(resource => resource.Id);
+            entity.Property(resource => resource.Name).HasMaxLength(200).IsRequired();
             entity.Property(resource => resource.Type).HasMaxLength(100).IsRequired();
             entity.Property(resource => resource.Owner).HasMaxLength(200).IsRequired();
             entity.Property(resource => resource.Environment).HasMaxLength(100).IsRequired();
