@@ -8,6 +8,11 @@ public class CreateResourceRequestValidator : AbstractValidator<CreateResourceRe
 {
     public CreateResourceRequestValidator()
     {
+        RuleFor(request => request.Name)
+            .NotEmpty()
+            .WithMessage("'Name' must not be empty.")
+            .MaximumLength(200);
+
         RuleFor(request => request.Type)
             .NotEmpty()
             .WithMessage("'Type' must not be empty.")
