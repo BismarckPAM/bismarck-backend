@@ -79,6 +79,7 @@ public class ResourcesControllerIntegrationTests : IClassFixture<ResourceApiFact
         // 1. POST: Create a resource
         var createRequest = new CreateResourceRequest
         {
+            Name = "QA-Postman-Res-1",
             Type = "ComputeInstance",
             Owner = "PlatformTeam",
             Environment = "Production",
@@ -91,6 +92,7 @@ public class ResourcesControllerIntegrationTests : IClassFixture<ResourceApiFact
         var createdResource = await postResponse.Content.ReadFromJsonAsync<ResourceResponse>(JsonOptions);
         Assert.NotNull(createdResource);
         Assert.NotEqual(Guid.Empty, createdResource.Id);
+        Assert.Equal("QA-Postman-Res-1", createdResource.Name);
         Assert.Equal("ComputeInstance", createdResource.Type);
         Assert.Equal("PlatformTeam", createdResource.Owner);
         Assert.Equal("Production", createdResource.Environment);
@@ -114,11 +116,13 @@ public class ResourcesControllerIntegrationTests : IClassFixture<ResourceApiFact
         var fetchedResource = await getByIdResponse.Content.ReadFromJsonAsync<ResourceResponse>(JsonOptions);
         Assert.NotNull(fetchedResource);
         Assert.Equal(resourceId, fetchedResource.Id);
+        Assert.Equal("QA-Postman-Res-1", fetchedResource.Name);
         Assert.Equal("ComputeInstance", fetchedResource.Type);
 
         // 4. PUT: Update the resource
         var updateRequest = new UpdateResourceRequest
         {
+            Name = "QA-Postman-Res-1-Updated",
             Type = "ComputeInstanceUpdated",
             Owner = "PlatformSec",
             Environment = "Staging",
@@ -131,6 +135,7 @@ public class ResourcesControllerIntegrationTests : IClassFixture<ResourceApiFact
 
         var updatedResource = await putResponse.Content.ReadFromJsonAsync<ResourceResponse>(JsonOptions);
         Assert.NotNull(updatedResource);
+        Assert.Equal("QA-Postman-Res-1-Updated", updatedResource.Name);
         Assert.Equal("ComputeInstanceUpdated", updatedResource.Type);
         Assert.Equal("PlatformSec", updatedResource.Owner);
         Assert.Equal("Staging", updatedResource.Environment);
@@ -164,6 +169,7 @@ public class ResourcesControllerIntegrationTests : IClassFixture<ResourceApiFact
 
         Assert.NotNull(rawDbEntity);
         Assert.False(rawDbEntity.IsActive);
+        Assert.Equal("QA-Postman-Res-1-Updated", rawDbEntity.Name);
         Assert.Equal("ComputeInstanceUpdated", rawDbEntity.Type);
     }
 
