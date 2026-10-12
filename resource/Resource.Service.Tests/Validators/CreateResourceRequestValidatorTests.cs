@@ -15,6 +15,7 @@ public class CreateResourceRequestValidatorTests
         // Arrange
         var request = new CreateResourceRequest
         {
+            Name = "Production Database",
             Type = "Database",
             Owner = "DevOps",
             Environment = "Production",
@@ -37,6 +38,7 @@ public class CreateResourceRequestValidatorTests
         // Arrange
         var request = new CreateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = type!,
             Owner = "DevOps",
             Environment = "Production",
@@ -59,6 +61,7 @@ public class CreateResourceRequestValidatorTests
         // Arrange
         var request = new CreateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = "VirtualMachine",
             Owner = owner!,
             Environment = "Production",
@@ -81,6 +84,7 @@ public class CreateResourceRequestValidatorTests
         // Arrange
         var request = new CreateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = "VirtualMachine",
             Owner = "DevOps",
             Environment = env!,
@@ -100,6 +104,7 @@ public class CreateResourceRequestValidatorTests
         // Arrange
         var request = new CreateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = "VirtualMachine",
             Owner = "DevOps",
             Environment = "Production",
@@ -120,6 +125,7 @@ public class CreateResourceRequestValidatorTests
         // Arrange
         var request = new CreateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = "VirtualMachine",
             Owner = "DevOps",
             Environment = "Production",
@@ -132,5 +138,42 @@ public class CreateResourceRequestValidatorTests
         // Assert
         result.ShouldHaveValidationErrorFor(r => r.Criticality)
             .WithErrorMessage("Criticality must be one of: LOW, MEDIUM, HIGH, CRITICAL.");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(null)]
+    public void Validate_WhenNameIsMissingOrWhitespace_FailsValidation(string? name)
+    {
+        var request = new CreateResourceRequest
+        {
+            Name = name!,
+            Type = "Database",
+            Owner = "DevOps",
+            Environment = "Production",
+            Criticality = ResourceCriticality.HIGH
+        };
+
+        var result = _validator.TestValidate(request);
+
+        result.ShouldHaveValidationErrorFor(r => r.Name);
+    }
+
+    [Fact]
+    public void Validate_WhenNameExceedsMaximumLength_FailsValidation()
+    {
+        var request = new CreateResourceRequest
+        {
+            Name = new string('N', 201),
+            Type = "Database",
+            Owner = "DevOps",
+            Environment = "Production",
+            Criticality = ResourceCriticality.HIGH
+        };
+
+        var result = _validator.TestValidate(request);
+
+        result.ShouldHaveValidationErrorFor(r => r.Name);
     }
 }
