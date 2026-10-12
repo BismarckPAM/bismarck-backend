@@ -15,6 +15,7 @@ public class UpdateResourceRequestValidatorTests
         // Arrange
         var request = new UpdateResourceRequest
         {
+            Name = "Production Database",
             Type = "Database",
             Owner = "DevOps",
             Environment = "Production",
@@ -38,6 +39,7 @@ public class UpdateResourceRequestValidatorTests
         // Arrange
         var request = new UpdateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = type!,
             Owner = "DevOps",
             Environment = "Production",
@@ -61,6 +63,7 @@ public class UpdateResourceRequestValidatorTests
         // Arrange
         var request = new UpdateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = "VirtualMachine",
             Owner = owner!,
             Environment = "Production",
@@ -84,6 +87,7 @@ public class UpdateResourceRequestValidatorTests
         // Arrange
         var request = new UpdateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = "VirtualMachine",
             Owner = "DevOps",
             Environment = env!,
@@ -104,6 +108,7 @@ public class UpdateResourceRequestValidatorTests
         // Arrange
         var request = new UpdateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = "VirtualMachine",
             Owner = "DevOps",
             Environment = "Production",
@@ -125,6 +130,7 @@ public class UpdateResourceRequestValidatorTests
         // Arrange
         var request = new UpdateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = "VirtualMachine",
             Owner = "DevOps",
             Environment = "Production",
@@ -146,6 +152,7 @@ public class UpdateResourceRequestValidatorTests
         // Arrange
         var request = new UpdateResourceRequest
         {
+            Name = "Virtual Machine",
             Type = "VirtualMachine",
             Owner = "DevOps",
             Environment = "Production",
@@ -158,5 +165,44 @@ public class UpdateResourceRequestValidatorTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(r => r.IsActive);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(null)]
+    public void Validate_WhenNameIsMissingOrWhitespace_FailsValidation(string? name)
+    {
+        var request = new UpdateResourceRequest
+        {
+            Name = name!,
+            Type = "Database",
+            Owner = "DevOps",
+            Environment = "Production",
+            Criticality = ResourceCriticality.HIGH,
+            IsActive = true
+        };
+
+        var result = _validator.TestValidate(request);
+
+        result.ShouldHaveValidationErrorFor(r => r.Name);
+    }
+
+    [Fact]
+    public void Validate_WhenNameExceedsMaximumLength_FailsValidation()
+    {
+        var request = new UpdateResourceRequest
+        {
+            Name = new string('N', 201),
+            Type = "Database",
+            Owner = "DevOps",
+            Environment = "Production",
+            Criticality = ResourceCriticality.HIGH,
+            IsActive = true
+        };
+
+        var result = _validator.TestValidate(request);
+
+        result.ShouldHaveValidationErrorFor(r => r.Name);
     }
 }
