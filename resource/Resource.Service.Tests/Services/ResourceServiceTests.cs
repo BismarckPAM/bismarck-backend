@@ -45,6 +45,7 @@ public class ResourceServiceTests
 
         var request = new CreateResourceRequest
         {
+            Name = "Production Database",
             Type = "Database",
             Owner = "DevOps",
             Environment = "Production",
@@ -56,6 +57,7 @@ public class ResourceServiceTests
 
         // Assert
         Assert.NotEqual(Guid.Empty, result.Id);
+        Assert.Equal("Production Database", result.Name);
         Assert.Equal("Database", result.Type);
         Assert.Equal("DevOps", result.Owner);
         Assert.Equal("Production", result.Environment);
@@ -64,6 +66,7 @@ public class ResourceServiceTests
 
         var dbResource = await dbContext.Resources.FindAsync(result.Id);
         Assert.NotNull(dbResource);
+        Assert.Equal("Production Database", dbResource.Name);
         Assert.Equal("Database", dbResource.Type);
     }
 
@@ -76,6 +79,7 @@ public class ResourceServiceTests
 
         var result = await service.CreateAsync(new CreateResourceRequest
         {
+            Name = "Production Database",
             Type = "Database",
             Owner = "DevOps",
             Environment = "Production",
@@ -219,6 +223,7 @@ public class ResourceServiceTests
         var resource = new ResourceModel
         {
             Id = Guid.NewGuid(),
+            Name = "Original Application",
             Type = "AppService",
             Owner = "Old Owner",
             Environment = "QA",
@@ -231,6 +236,7 @@ public class ResourceServiceTests
 
         var updateRequest = new UpdateResourceRequest
         {
+            Name = "Updated Application",
             Type = "AppServiceUpdated",
             Owner = "New Owner",
             Environment = "Prod",
@@ -243,6 +249,7 @@ public class ResourceServiceTests
 
         // Assert
         Assert.Equal("AppServiceUpdated", result.Type);
+        Assert.Equal("Updated Application", result.Name);
         Assert.Equal("New Owner", result.Owner);
         Assert.Equal("Prod", result.Environment);
         Assert.Equal(ResourceCriticality.CRITICAL, result.Criticality);
@@ -250,6 +257,7 @@ public class ResourceServiceTests
         var dbResource = await dbContext.Resources.FindAsync(resource.Id);
         Assert.NotNull(dbResource);
         Assert.Equal("AppServiceUpdated", dbResource.Type);
+        Assert.Equal("Updated Application", dbResource.Name);
         Assert.Equal("New Owner", dbResource.Owner);
     }
 
@@ -262,6 +270,7 @@ public class ResourceServiceTests
         var resource = new ResourceModel
         {
             Id = Guid.NewGuid(),
+            Name = "Original Application",
             Type = "AppService",
             Owner = "Old Owner",
             Environment = "QA",
@@ -274,6 +283,7 @@ public class ResourceServiceTests
 
         var result = await service.UpdateAsync(resource.Id, new UpdateResourceRequest
         {
+            Name = "Updated Application",
             Type = "AppServiceUpdated",
             Owner = "New Owner",
             Environment = "Prod",
@@ -295,6 +305,7 @@ public class ResourceServiceTests
 
         var updateRequest = new UpdateResourceRequest
         {
+            Name = "Missing Resource",
             Type = "Service",
             Owner = "Owner",
             Environment = "Prod",
@@ -316,6 +327,7 @@ public class ResourceServiceTests
         var inactiveResource = new ResourceModel
         {
             Id = Guid.NewGuid(),
+            Name = "Decommissioned Server",
             Type = "Server",
             Owner = "Ops",
             Environment = "Prod",
@@ -328,6 +340,7 @@ public class ResourceServiceTests
 
         var reactivateRequest = new UpdateResourceRequest
         {
+            Name = "Reactivated Server",
             Type = "Server",
             Owner = "Ops",
             Environment = "Prod",
@@ -340,11 +353,13 @@ public class ResourceServiceTests
 
         // Assert
         Assert.True(result.IsActive);
+        Assert.Equal("Reactivated Server", result.Name);
         Assert.Equal(ResourceCriticality.HIGH, result.Criticality);
 
         var activeInDb = await dbContext.Resources.FirstOrDefaultAsync(r => r.Id == inactiveResource.Id);
         Assert.NotNull(activeInDb);
         Assert.True(activeInDb.IsActive);
+        Assert.Equal("Reactivated Server", activeInDb.Name);
     }
 
     [Fact]
