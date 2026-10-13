@@ -1,3 +1,4 @@
+
 using Approval.Service.Clients;
 using Approval.Service.Data;
 using Approval.Service.Services;
@@ -15,8 +16,6 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IApproverAuthorizationService, ApprovalService>();
 builder.Services.AddSingleton<IDomainEventPublisher, KafkaDomainEventPublisher>();
 
-// Best-effort enrichment clients (identity/resource display names). Failures
-// degrade to null labels and never block request submission.
 var identityServiceUrl = Environment.GetEnvironmentVariable("IDENTITY_SERVICE_URL")
     ?? builder.Configuration["IdentityService:BaseUrl"]
     ?? "http://localhost:5001";
@@ -49,6 +48,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey))
         };
     });
+
 builder.Services.AddAuthorization();
 
 var approvalConnectionString = builder.Configuration.GetConnectionString("ApprovalDatabase")
@@ -58,19 +58,14 @@ var approvalConnectionString = builder.Configuration.GetConnectionString("Approv
 
 builder.Services.AddDbContext<ApprovalDbContext>(options =>
     options.UseNpgsql(approvalConnectionString));
-    
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-// Behind the API Gateway TLS is already terminated, and internal traffic is
-// plain HTTP. HttpsRedirection here would emit a 307 back to the client for
-// every proxied request, so it must be switchable off.
 if (!string.Equals(
         Environment.GetEnvironmentVariable("DISABLE_HTTPS_REDIRECTION"),
         "true",
@@ -79,16 +74,15 @@ if (!string.Equals(
     app.UseHttpsRedirection();
 }
 
+// Prometheus instrumentation runs before app.RunAsync()
+app.UseHttpMetrics();
+
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
+app.MapMetrics("/metrics");
 
-app.Run();
-
-app.UseRouting();
-app.UseHttpMetrics(); 
-app.MapMetrics();
+await app.RunAsync();
 
 public partial class Program { }
-
-
