@@ -1,3 +1,4 @@
+
 using Notification.Service.Data;
 using Microsoft.EntityFrameworkCore;
 using Notification.Service.Services;
@@ -8,19 +9,14 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-// Database
 var connectionString = builder.Configuration.GetConnectionString("NotificationDatabase")
     ?? throw new InvalidOperationException("Connection string 'NotificationDatabase' not found.");
 
 builder.Services.AddDbContext<NotificationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-
-// JWT Authentication & Authorization must match Identity's token contract.
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY")
     ?? jwtSettings["SigningKey"];
@@ -39,7 +35,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtSettings["Issuer"],
             ValidAudience = jwtSettings["Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ClockSkew = TimeSpan.Zero // Optional: removes the default 5-minute clock drift grace period
+            ClockSkew = TimeSpan.Zero
         };
     });
 
@@ -49,18 +45,13 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddControllers();
 builder.Services.AddHostedService<KafkaNotificationConsumer>();
 
-
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-// Behind the API Gateway TLS is already terminated, and internal traffic is
-// plain HTTP. HttpsRedirection here would emit a 307 back to the client for
-// every proxied request, so it must be switchable off.
 if (!string.Equals(
         Environment.GetEnvironmentVariable("DISABLE_HTTPS_REDIRECTION"),
         "true",
@@ -69,15 +60,13 @@ if (!string.Equals(
     app.UseHttpsRedirection();
 }
 
+// Prometheus instrumentation before app.RunAsync()
+app.UseHttpMetrics();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapMetrics("/metrics");
 
-
-app.Run();
-app.UseRouting();
-app.UseHttpMetrics(); 
-app.MapMetrics();
-
-
+await app.RunAsync();
