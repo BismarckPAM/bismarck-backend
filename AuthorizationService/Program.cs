@@ -1,3 +1,4 @@
+
 using AuthorizationService.Data;
 using AuthorizationService.Clients;
 using AuthorizationService.Middleware;
@@ -8,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 using Polly;
 using Polly.Extensions.Http;
 using Serilog;
+using Prometheus;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -26,8 +28,6 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 
 // JWT Authentication & Authorization must match Identity's token contract.
-// Without this the JIT session endpoints cannot identify the caller and return
-// 403 for every request (User would have no claims to resolve).
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY")
     ?? jwtSettings["SigningKey"];
@@ -49,11 +49,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.Zero
         };
 
-        // The brokered terminal arrives as a WebSocket, and the browser WebSocket
-        // API cannot set an Authorization header. Without reading the token from
-        // the query string the handshake authenticated but produced a principal
-        // with no claims, so JitTerminalController.ResolveCaller() returned null
-        // and every connect was refused. Scoped to WebSocket requests only.
+        // WebSocket JWT handling for the JIT terminal.
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
@@ -119,24 +115,21 @@ var connectionString = builder.Configuration.GetConnectionString("AuthorizationD
 
 builder.Services.AddDbContext<AuthorizationDbContext>(options =>
     options.UseNpgsql(connectionString));
+
 builder.Services.AddScoped<IPolicyDecisionEngine, PolicyDecisionEngine>();
 builder.Services.AddSingleton<IAuthorizationEventPublisher, KafkaAuthorizationEventPublisher>();
+
 builder.Services
     .AddHealthChecks()
     .AddDbContextCheck<AuthorizationDbContext>("authorization-database");
 
 builder.Services.AddSingleton<ISystemClock, SystemClock>();
 
-// JIT cloud provisioning: Azure ARM when configured, otherwise a local-only
-// no-op so the end-to-end lifecycle still works in dev/CI.
-// DefaultAzureCredential resolves the Container App's system-assigned managed
-// identity in Azure (no App Registration needed) and falls back to
-// AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID for local development.
+// Azure VM JIT provisioning.
 builder.Services.AddSingleton<Azure.Core.TokenCredential>(sp =>
     new Azure.Identity.DefaultAzureCredential(
         new Azure.Identity.DefaultAzureCredentialOptions
         {
-            // Never probe the developer CLI / interactive flows in a container.
             ExcludeInteractiveBrowserCredential = true,
             ExcludeAzureCliCredential = true
         }));
@@ -150,9 +143,7 @@ builder.Services.AddTransient<IAzureJitProvisioner>(sp =>
         : new NoOpJitProvisioner(sp.GetRequiredService<ILogger<NoOpJitProvisioner>>());
 });
 
-// Brokered JIT terminal. The service holds the VM private key and owns every
-// SSH channel, so a user never receives the credential and expiry can kill a
-// live shell instead of merely recording that it should.
+// Brokered SSH terminal and background workers.
 builder.Services.Configure<JitSshOptions>(builder.Configuration.GetSection(JitSshOptions.SectionName));
 builder.Services.AddSingleton<IJitTerminalBroker, JitTerminalBroker>();
 
@@ -174,13 +165,22 @@ if (!string.Equals(
 {
     app.UseHttpsRedirection();
 }
+
 app.UseMiddleware<ExceptionHandlerMiddleware>();
-// Authentication must run before the controllers so User carries the caller's
-// claims; JitSessionsController resolves the caller from them.
+
+// Prometheus HTTP instrumentation.
+app.UseHttpMetrics();
+
+// Authentication and authorization.
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Existing endpoints.
 app.MapHealthChecks("/health");
 app.MapControllers();
+
+// Prometheus scrape endpoint.
+app.MapMetrics("/metrics");
 
 await app.RunAsync();
 

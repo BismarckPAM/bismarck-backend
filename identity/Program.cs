@@ -1,3 +1,4 @@
+
 using FluentValidation;
 using Identity.Service.Data;
 using Identity.Service.DTOs;
@@ -9,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Prometheus;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -98,9 +100,14 @@ if (!string.Equals(
 }
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 app.UseCors("AllowFrontend");
+
+// Prometheus instrumentation
+app.UseHttpMetrics();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapMetrics("/metrics");
 
 await app.RunAsync();
 

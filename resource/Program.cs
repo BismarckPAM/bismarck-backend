@@ -1,3 +1,4 @@
+
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +11,7 @@ using Resource.Service.Mappings;
 using Resource.Service.Middleware;
 using Resource.Service.Services;
 using Resource.Service.Validators;
+using Prometheus;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -117,10 +119,15 @@ if (!string.Equals(
 }
 
 app.UseCors("AllowFrontend");
+
+// Prometheus instrumentation
+app.UseHttpMetrics();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapMetrics("/metrics");
 
 await app.RunAsync();
 

@@ -1,9 +1,11 @@
+
 using System.Text;
 using Audit.Service.Data;
 using Audit.Service.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,7 +33,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ClockSkew = TimeSpan.Zero // Optional: removes the default 5-minute clock drift grace period
+            ClockSkew = TimeSpan.Zero
         };
     });
 
@@ -41,12 +43,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddScoped<IAuditService, AuditService>();
 
-// The Kafka consumer is registered only when enabled, matching the Analytics
-// Service (BIS-402). Integration tests switch it off so the real host can start
-// without a broker - the Audit rows they query are seeded straight into the
-// database, which is exactly what this consumer would otherwise write.
-// Normal deployments keep the default (enabled), so production behaviour is
-// unchanged.
+// Existing Kafka consumer registration is unchanged.
 if (builder.Configuration.GetValue("Kafka:Enabled", true))
 {
     builder.Services.AddHostedService<KafkaAuditConsumer>();
@@ -61,9 +58,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-// Behind the API Gateway TLS is already terminated, and internal traffic is
-// plain HTTP. HttpsRedirection here would emit a 307 back to the client for
-// every proxied request, so it must be switchable off.
+// HTTPS redirection must remain configurable behind YARP.
 if (!string.Equals(
         Environment.GetEnvironmentVariable("DISABLE_HTTPS_REDIRECTION"),
         "true",
@@ -72,16 +67,18 @@ if (!string.Equals(
     app.UseHttpsRedirection();
 }
 
+// Prometheus HTTP metrics.
+app.UseHttpMetrics();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapMetrics("/metrics");
 
 await app.RunAsync();
 
 /// <summary>
-/// Exposed so the integration tests can use <c>WebApplicationFactory&lt;Program&gt;</c>,
-/// matching the pattern already used by the Analytics (BIS-402), Approval and
-/// Resource test suites.
+/// Exposed to integration tests using WebApplicationFactory.
 /// </summary>
 public partial class Program { }
