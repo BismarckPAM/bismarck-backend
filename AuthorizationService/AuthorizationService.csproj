@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BuildingBlocks\Messaging\Messaging.csproj" />
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
   </ItemGroup>
 
 </Project>
