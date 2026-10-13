@@ -4,6 +4,7 @@ namespace Resource.Service.DTOs;
 
 public class UpdateResourceRequest
 {
+    public string Name { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;
     public string Owner { get; set; } = string.Empty;
     public string Environment { get; set; } = string.Empty;
