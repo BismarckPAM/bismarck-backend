@@ -24,6 +24,7 @@
     <PackageReference Include="Confluent.Kafka" Version="2.15.1" />
     <!-- Matches Resource.Service.csproj, the existing Swashbuckle version. -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.0.1" />
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
   </ItemGroup>
 
   <ItemGroup>
