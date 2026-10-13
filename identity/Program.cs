@@ -1,3 +1,4 @@
+
 using FluentValidation;
 using Identity.Service.Data;
 using Identity.Service.DTOs;
@@ -9,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Prometheus;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,6 +28,7 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod();
     });
 });
+
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -42,12 +45,14 @@ builder.Services.AddSwaggerGen(options =>
         [new OpenApiSecuritySchemeReference("Bearer", document)] = new List<string>()
     });
 });
+
 var dbPassword = Environment.GetEnvironmentVariable("IDENTITY_DB_PASSWORD")
     ?? throw new InvalidOperationException("IDENTITY_DB_PASSWORD environment variable is required.");
 var connectionString = builder.Configuration.GetConnectionString("IdentityDatabase") + $";Password={dbPassword}";
 
 builder.Services.AddDbContext<IdentityDbContext>(options =>
     options.UseNpgsql(connectionString));
+
 builder.Services.AddAutoMapper(config => config.AddProfile<MappingProfile>());
 builder.Services.AddValidatorsFromAssemblyContaining<MappingProfile>();
 builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
@@ -63,6 +68,7 @@ var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var signingKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY") ?? jwtSettings["SigningKey"];
 if (string.IsNullOrWhiteSpace(signingKey))
     throw new InvalidOperationException("JWT_SIGNING_KEY environment variable is required.");
+
 builder.Configuration["JwtSettings:SigningKey"] = signingKey;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -78,11 +84,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey))
         };
     });
+
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Environment.IsEnvironment("Testing"))
 {
     app.UseSwagger();
@@ -96,12 +102,19 @@ if (!string.Equals(
 {
     app.UseHttpsRedirection();
 }
+
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 app.UseCors("AllowFrontend");
+
+// Prometheus HTTP monitoring
+app.UseHttpMetrics();
+
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapControllers();
 
-app.Run();
+app.MapControllers();
+app.MapMetrics("/metrics");
+
+await app.RunAsync();
 
 public partial class Program { }
