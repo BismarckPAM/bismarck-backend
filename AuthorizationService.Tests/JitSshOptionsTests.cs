@@ -13,13 +13,20 @@ public sealed class JitSshOptionsTests
 {
     private const string Pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----";
 
-    [Fact]
-    public void ResolveLogin_PrefersTheSessionsOwnEmail()
-    {
-        var options = new JitSshOptions { Username = "azureuser" };
 
-        Assert.Equal("user@gmail.com", options.ResolveLogin("user@gmail.com"));
-    }
+[Fact]
+public void ResolveLogin_PrefersConfiguredSharedUsername()
+{
+    var options = new JitSshOptions
+    {
+        Username = "azureuser"
+    };
+
+    Assert.Equal(
+        "azureuser",
+        options.ResolveLogin("user@gmail.com"));
+}
+
 
     [Fact]
     public void ResolveLogin_FallsBackToSharedUsernameWhenNoEmail()
