@@ -92,7 +92,41 @@ if (app.Environment.IsDevelopment()
     || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint(
+        "/swagger/v1/swagger.json",
+        "Identity Service v1");
+
+    if (app.Configuration.GetValue<bool>("Swagger:Enabled"))
+    {
+        options.SwaggerEndpoint(
+            "/swagger-docs/resource/v1.json",
+            "Resource Service v1");
+
+        options.SwaggerEndpoint(
+            "/swagger-docs/authorization/v1.json",
+            "Authorization Service v1");
+
+        options.SwaggerEndpoint(
+            "/swagger-docs/approval/v1.json",
+            "Approval Service v1");
+
+        options.SwaggerEndpoint(
+            "/swagger-docs/audit/v1.json",
+            "Audit Service v1");
+
+        options.SwaggerEndpoint(
+            "/swagger-docs/notification/v1.json",
+            "Notification Service v1");
+
+        options.SwaggerEndpoint(
+            "/swagger-docs/analytics/v1.json",
+            "Analytics Service v1");
+    }
+});
+
 }
 
 
