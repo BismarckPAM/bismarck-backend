@@ -85,11 +85,16 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Environment.IsEnvironment("Testing"))
+
+if (app.Environment.IsDevelopment()
+    || app.Environment.IsStaging()
+    || app.Environment.IsEnvironment("Testing")
+    || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
 
 if (!string.Equals(
         Environment.GetEnvironmentVariable("DISABLE_HTTPS_REDIRECTION"),
