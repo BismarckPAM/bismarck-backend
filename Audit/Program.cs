@@ -53,10 +53,13 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+
+if (app.Environment.IsDevelopment()
+    || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.MapOpenApi();
 }
+
 
 // HTTPS redirection must remain configurable behind YARP.
 if (!string.Equals(
