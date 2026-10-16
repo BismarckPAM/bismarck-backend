@@ -23,8 +23,13 @@ namespace AuthorizationService.Services;
 public sealed class AzureJitProvisioner : IAzureJitProvisioner
 {
     // Well-known Azure RBAC role definition GUIDs (stable, documented by Microsoft).
-    private const string VirtualMachineUserLoginRoleId = "fb879df8-f326-4884-b1e9-212f174751e1";
-    private const string VirtualMachineContributorRoleId = "9980e02c-c2be-4d73-94e8-173b1dc7cf3c";
+    
+private const string VirtualMachineUserLoginRoleId =
+    "fb879df8-f326-4884-b1cf-06f3ad86be52";
+
+private const string VirtualMachineAdministratorLoginRoleId =
+    "1c0163c0-47e6-4577-8991-ea5c82e286e4";
+
 
     private const string ArmEndpoint = "https://management.azure.com";
     private const string ArmScope = "https://management.azure.com/.default";
@@ -172,8 +177,13 @@ public sealed class AzureJitProvisioner : IAzureJitProvisioner
         return payload?.Id;
     }
 
-    private static string ResolveRoleDefinitionId(int requestedLevel)
-        => requestedLevel >= 3 ? VirtualMachineContributorRoleId : VirtualMachineUserLoginRoleId;
+
+    
+private static string ResolveRoleDefinitionId(int requestedLevel)
+    => requestedLevel >= 4
+        ? VirtualMachineAdministratorLoginRoleId
+        : VirtualMachineUserLoginRoleId;
+
 
     /// <summary>
     /// Resolves the narrowest scope the role assignment can be applied at:
