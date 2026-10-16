@@ -173,6 +173,14 @@ if (!string.Equals(
 
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 
+
+// Enable browser-based JIT SSH terminal WebSockets.
+app.UseWebSockets(new WebSocketOptions
+{
+    KeepAliveInterval = TimeSpan.FromSeconds(30)
+});
+
+
 // Prometheus HTTP instrumentation.
 app.UseHttpMetrics();
 
