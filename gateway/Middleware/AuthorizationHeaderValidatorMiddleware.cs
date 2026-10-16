@@ -68,6 +68,19 @@ public sealed class AuthorizationHeaderValidatorMiddleware
             return;
         }
 
+        
+// Allow GET requests for Swagger documentation.
+// Protected API endpoints still require JWT authentication.
+       if (HttpMethods.IsGet(context.Request.Method)
+          && context.Request.Path.StartsWithSegments(
+          "/swagger",
+        StringComparison.OrdinalIgnoreCase))
+    {
+    await _next(context);
+    return;
+     }
+
+
         var token = ResolveToken(context, path);
         if (string.IsNullOrWhiteSpace(token))
         {
