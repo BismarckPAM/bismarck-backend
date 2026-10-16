@@ -21,17 +21,18 @@ public interface ITurnstileVerifier
 public sealed class CloudflareTurnstileVerifier(
     HttpClient httpClient,
     IConfiguration configuration,
-    ILogger<CloudflareTurnstileVerifier> logger) : ITurnstileVerifier
+    ILogger<CloudflareTurnstileVerifier> logger,
+    IHostEnvironment environment) : ITurnstileVerifier
 {
     private const string SiteVerifyUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
     private readonly string? _secretKey = configuration["Turnstile:SecretKey"];
 
-    public bool IsEnabled { get; } =
-        configuration["Turnstile:Enabled"] is { Length: > 0 } enabledConfig
-            && bool.TryParse(enabledConfig, out var enabled)
-                ? enabled
-                : !string.IsNullOrWhiteSpace(configuration["Turnstile:SecretKey"]);
+    // A load-test/local bypass must never disable verification in production.
+    // Missing or malformed configuration also requires verification.
+    public bool IsEnabled { get; } = !(environment.IsDevelopment()
+        && bool.TryParse(configuration["Turnstile:Enabled"], out var enabled)
+        && !enabled);
 
     public async Task<bool> VerifyAsync(string? token, string? remoteIp, CancellationToken cancellationToken = default)
     {

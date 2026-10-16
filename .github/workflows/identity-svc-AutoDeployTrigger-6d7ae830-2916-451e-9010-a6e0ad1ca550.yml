@@ -60,5 +60,6 @@ jobs:
             az containerapp update \
               --name identity-svc \
               --resource-group bismarck-pam-rg \
-              --image bismarckregistry.azurecr.io/identity-svc:${{ github.sha }}
+              --image bismarckregistry.azurecr.io/identity-svc:${{ github.sha }} \
+              --set-env-vars Turnstile__Enabled=true
 
