@@ -136,14 +136,27 @@ public sealed class JitSshOptions
     /// fallback username. Returns null when nothing usable is available.
     /// </summary>
 
+
 public string? ResolveLogin(string? userEmail)
 {
     var email = userEmail?.Trim();
 
-    // An explicit template takes priority.
+    // Explicit username template takes precedence.
     if (!string.IsNullOrWhiteSpace(UsernameTemplate))
     {
-        var resolved = UsernameTemplate
+        var template = UsernameTemplate.Trim();
+
+        // A template needing an email cannot be used
+        // when the user's email is missing.
+        if (template.Contains(
+                EmailPlaceholder,
+                StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(email))
+        {
+            return null;
+        }
+
+        var resolved = template
             .Replace(
                 EmailPlaceholder,
                 email ?? string.Empty,
@@ -155,15 +168,17 @@ public string? ResolveLogin(string? userEmail)
             : resolved;
     }
 
-    // Use the configured shared SSH account.
+    // Use the explicitly configured VM SSH account.
     if (!string.IsNullOrWhiteSpace(Username))
         return Username.Trim();
 
-    // Per-user SSH login when no shared account is set.
+    // Without shared account configuration,
+    // use the session's own email.
     return string.IsNullOrWhiteSpace(email)
         ? null
         : email;
 }
+
 
 
     /// <summary>
