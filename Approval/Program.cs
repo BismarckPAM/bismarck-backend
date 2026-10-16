@@ -62,10 +62,13 @@ builder.Services.AddDbContext<ApprovalDbContext>(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+
+if (app.Environment.IsDevelopment()
+    || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.MapOpenApi();
 }
+
 
 // Azure gateway handles external TLS.
 if (!string.Equals(
