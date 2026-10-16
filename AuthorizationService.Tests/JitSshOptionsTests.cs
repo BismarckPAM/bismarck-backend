@@ -37,6 +37,18 @@ public void ResolveLogin_PrefersConfiguredSharedUsername()
         Assert.Equal("azureuser", options.ResolveLogin("   "));
     }
 
+    
+[Fact]
+public void ResolveLogin_UsesEmailWhenNoSharedUsernameConfigured()
+{
+    var options = new JitSshOptions();
+
+    Assert.Equal(
+        "user@gmail.com",
+        options.ResolveLogin("user@gmail.com"));
+}
+
+
     [Fact]
     public void ResolveLogin_AppliesTemplateToTheEmail()
     {
