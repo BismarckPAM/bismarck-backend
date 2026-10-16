@@ -87,13 +87,16 @@ if (builder.Configuration.GetValue("Kafka:Enabled", true))
 
 var app = builder.Build();
 
+
 if (app.Environment.IsDevelopment()
     || app.Environment.IsStaging()
-    || app.Environment.IsEnvironment("Testing"))
+    || app.Environment.IsEnvironment("Testing")
+    || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
 
 // HTTP ingress behind the gateway.
 if (!string.Equals(
