@@ -135,26 +135,36 @@ public sealed class JitSshOptions
     /// the account Azure actually created on the VM - and only then the shared
     /// fallback username. Returns null when nothing usable is available.
     /// </summary>
-    public string? ResolveLogin(string? userEmail)
+
+public string? ResolveLogin(string? userEmail)
+{
+    var email = userEmail?.Trim();
+
+    // An explicit template takes priority.
+    if (!string.IsNullOrWhiteSpace(UsernameTemplate))
     {
-        var email = userEmail?.Trim();
+        var resolved = UsernameTemplate
+            .Replace(
+                EmailPlaceholder,
+                email ?? string.Empty,
+                StringComparison.OrdinalIgnoreCase)
+            .Trim();
 
-        if (!string.IsNullOrWhiteSpace(UsernameTemplate))
-        {
-            if (string.IsNullOrWhiteSpace(email))
-                return null;
-
-            var resolved = UsernameTemplate
-                .Replace(EmailPlaceholder, email, StringComparison.OrdinalIgnoreCase)
-                .Trim();
-            return string.IsNullOrWhiteSpace(resolved) ? null : resolved;
-        }
-
-        if (!string.IsNullOrWhiteSpace(email))
-            return email;
-
-        return string.IsNullOrWhiteSpace(Username) ? null : Username.Trim();
+        return string.IsNullOrWhiteSpace(resolved)
+            ? null
+            : resolved;
     }
+
+    // Use the configured shared SSH account.
+    if (!string.IsNullOrWhiteSpace(Username))
+        return Username.Trim();
+
+    // Per-user SSH login when no shared account is set.
+    return string.IsNullOrWhiteSpace(email)
+        ? null
+        : email;
+}
+
 
     /// <summary>
     /// Resolves the private key for a login: the per-user key when one is
