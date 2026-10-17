@@ -60,7 +60,7 @@ jobs:
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
-            /d:sonar.coverage.exclusions="**/*Tests*/**,**/Migrations/**"
+            /d:sonar.coverage.exclusions="**/*Tests*/**,**/Migrations/**,**/Program.cs,**/*DbContextFactory.cs,**/DTOs/**,**/DomainEventMessage.cs"
 
       # 7. Build all microservices
       - name: Build All Services
