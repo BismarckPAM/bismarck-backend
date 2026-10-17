@@ -68,6 +68,42 @@ public sealed class AccessPoliciesControllerCoverageTests
         Assert.IsType<OkObjectResult>((await controller.Update(policy.Id, request, CancellationToken.None)).Result);
     }
 
+    [Theory]
+    [InlineData("", "VM", "DEV", "LOW", 1)]
+    [InlineData("Role", "", "DEV", "LOW", 1)]
+    [InlineData("Role", "VM", "", "LOW", 1)]
+    [InlineData("Role", "VM", "DEV", "", 1)]
+    [InlineData("Role", "VM", "DEV", "LOW", -1)]
+    [InlineData("Role", "VM", "DEV", "LOW", 6)]
+    public async Task Create_RejectsEachInvalidPolicyField(
+        string role, string resourceType, string environment, string criticality, int maxAccessLevel)
+    {
+        await using var context = CreateContext();
+        var controller = new AccessPoliciesController(context);
+
+        var result = await controller.Create(new AccessPolicyRequest
+        {
+            Role = role,
+            ResourceType = resourceType,
+            Environment = environment,
+            Criticality = criticality,
+            MaxAccessLevel = maxAccessLevel
+        }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Create_RejectsNullRequest()
+    {
+        await using var context = CreateContext();
+        var controller = new AccessPoliciesController(context);
+
+        var result = await controller.Create(null!, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
     private static AuthorizationDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<AuthorizationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
