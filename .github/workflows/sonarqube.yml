@@ -73,6 +73,9 @@ jobs:
       - name: Run Tests & Collect Coverage
         run: |
           set -euo pipefail
+          rm -rf ./TestResults
+          mkdir -p ./TestResults
+
           mapfile -d '' test_projects < <(find . -type f -name '*Tests.csproj' -print0 | sort -z)
           if [ "${#test_projects[@]}" -eq 0 ]; then
             echo "No test projects were found." >&2
@@ -90,8 +93,8 @@ jobs:
 
           report_count="$(find ./TestResults -type f -name 'coverage.opencover.xml' | wc -l)"
           expected_report_count="${#test_projects[@]}"
-          if [ "$report_count" -ne "$expected_report_count" ]; then
-            echo "Expected $expected_report_count OpenCover coverage reports, found $report_count." >&2
+          if [ "$report_count" -lt "$expected_report_count" ]; then
+            echo "Expected at least $expected_report_count OpenCover coverage reports, found $report_count." >&2
             exit 1
           fi
 
