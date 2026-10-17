@@ -27,7 +27,7 @@ public sealed class AccessPoliciesControllerCoverageTests
         Assert.Equal("DEVELOPER", response.Role);
         var all = Assert.IsType<OkObjectResult>(
             (await controller.GetAll(CancellationToken.None)).Result);
-        Assert.Single(Assert.IsAssignableFrom<IEnumerable<AccessPolicyResponse>>(all.Value));
+        Assert.Single(Assert.IsType<IEnumerable<AccessPolicyResponse>>(all.Value, exactMatch: false));
 
         var updated = Assert.IsType<OkObjectResult>((await controller.Update(
             response.Id,
