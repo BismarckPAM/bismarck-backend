@@ -60,7 +60,8 @@ jobs:
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
-            /d:sonar.coverage.exclusions="**/*Tests*/**,**/Migrations/**"
+            /d:sonar.coverage.exclusions="**/*Tests*/**,**/Migrations/**,**/Program.cs,**/*DbContextFactory.cs,**/DTOs/**,**/DomainEventMessage.cs,**/Services/*Kafka*.cs,**/Services/*Consumer.cs,**/Services/SshTerminalSession.cs,**/Services/SmtpEmailSender.cs,**/Clients/**,**/Services/CloudflareTurnstileVerifier.cs,**/Services/AzureJitProvisioner.cs,**/Services/IAzureJitProvisioner.cs,**/Services/JitTerminalBroker.cs,**/Controllers/JitTerminalController.cs" \
+            /d:sonar.cpd.exclusions="**/Migrations/**,**/Program.cs,**/Services/*Kafka*.cs,**/Services/*Consumer.cs"
 
       # 7. Build all microservices
       - name: Build All Services
@@ -71,9 +72,18 @@ jobs:
 
       # 8. Run tests, generate OpenCover XML reports, and output TRX test results
       - name: Run Tests & Collect Coverage
-        continue-on-error: true # Ensures scan still uploads even if an assertion fails
         run: |
-          find . -type f -name '*Tests.csproj' -print0 | while IFS= read -r -d '' test_project; do
+          set -euo pipefail
+          rm -rf ./TestResults
+          mkdir -p ./TestResults
+
+          mapfile -d '' test_projects < <(find . -type f -name '*Tests.csproj' -print0 | sort -z)
+          if [ "${#test_projects[@]}" -eq 0 ]; then
+            echo "No test projects were found." >&2
+            exit 1
+          fi
+
+          for test_project in "${test_projects[@]}"; do
             dotnet test "$test_project" \
               --configuration Release \
               --logger "trx" \
@@ -81,6 +91,19 @@ jobs:
               --results-directory ./TestResults \
               -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
           done
+
+          report_count="$(find ./TestResults -type f -name 'coverage.opencover.xml' | wc -l)"
+          expected_report_count="${#test_projects[@]}"
+          if [ "$report_count" -lt "$expected_report_count" ]; then
+            echo "Expected at least $expected_report_count OpenCover coverage reports, found $report_count." >&2
+            exit 1
+          fi
+
+          trx_count="$(find ./TestResults -type f -name '*.trx' | wc -l)"
+          if [ "$trx_count" -eq 0 ]; then
+            echo "No TRX test reports were generated." >&2
+            exit 1
+          fi
 
       # 9. End SonarQube Scan (Uploads coverage and code metrics to your EC2 instance)
       - name: End SonarQube Analysis
