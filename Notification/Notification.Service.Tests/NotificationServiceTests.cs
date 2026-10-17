@@ -97,6 +97,78 @@ public sealed class NotificationServiceTests
         Assert.True(Assert.Single(result.Items).IsRead);
     }
 
+    [Fact]
+    public async Task MarkAsReadAsync_MarksOwnedUnreadNotification()
+    {
+        await using var context = CreateContext();
+        var userId = Guid.NewGuid();
+        var notification = AddNotification(context, userId, "ApprovalGranted", DateTimeOffset.UtcNow);
+        var service = new NotificationService(context);
+
+        var result = await service.MarkAsReadAsync(userId, notification.Id);
+
+        Assert.True(result);
+        Assert.True((await context.Notifications.FindAsync(notification.Id))!.IsRead);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MarkAsReadAsync_ReturnsTrueAndPreservesReadState(bool alreadyRead)
+    {
+        await using var context = CreateContext();
+        var userId = Guid.NewGuid();
+        var notification = AddNotification(
+            context, userId, "AccessGranted", DateTimeOffset.UtcNow, alreadyRead);
+        var service = new NotificationService(context);
+
+        var result = await service.MarkAsReadAsync(userId, notification.Id);
+
+        Assert.True(result);
+        Assert.True((await context.Notifications.FindAsync(notification.Id))!.IsRead);
+    }
+
+    [Fact]
+    public async Task MarkAsReadAsync_DoesNotMutateAnotherUsersNotification()
+    {
+        await using var context = CreateContext();
+        var notification = AddNotification(
+            context, Guid.NewGuid(), "AccessDenied", DateTimeOffset.UtcNow);
+        var service = new NotificationService(context);
+
+        var result = await service.MarkAsReadAsync(Guid.NewGuid(), notification.Id);
+
+        Assert.False(result);
+        Assert.False((await context.Notifications.FindAsync(notification.Id))!.IsRead);
+    }
+
+    [Fact]
+    public async Task MarkAllAsReadAsync_MarksOnlyUnreadNotificationsForUser()
+    {
+        await using var context = CreateContext();
+        var userId = Guid.NewGuid();
+        AddNotification(context, userId, "One", DateTimeOffset.UtcNow);
+        AddNotification(context, userId, "Two", DateTimeOffset.UtcNow, isRead: true);
+        AddNotification(context, Guid.NewGuid(), "Other", DateTimeOffset.UtcNow);
+        var service = new NotificationService(context);
+
+        var count = await service.MarkAllAsReadAsync(userId);
+
+        Assert.Equal(1, count);
+        Assert.Equal(2, await context.Notifications.CountAsync(n => n.UserId == userId && n.IsRead));
+    }
+
+    [Fact]
+    public async Task MarkAllAsReadAsync_ReturnsZeroWhenNothingIsUnread()
+    {
+        await using var context = CreateContext();
+        var userId = Guid.NewGuid();
+        AddNotification(context, userId, "AlreadyRead", DateTimeOffset.UtcNow, isRead: true);
+        var service = new NotificationService(context);
+
+        Assert.Equal(0, await service.MarkAllAsReadAsync(userId));
+    }
+
     private static NotificationDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<NotificationDbContext>()
