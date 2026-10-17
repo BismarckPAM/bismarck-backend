@@ -73,7 +73,13 @@ jobs:
       - name: Run Tests & Collect Coverage
         run: |
           set -euo pipefail
-          find . -type f -name '*Tests.csproj' -print0 | while IFS= read -r -d '' test_project; do
+          mapfile -d '' test_projects < <(find . -type f -name '*Tests.csproj' -print0 | sort -z)
+          if [ "${#test_projects[@]}" -eq 0 ]; then
+            echo "No test projects were found." >&2
+            exit 1
+          fi
+
+          for test_project in "${test_projects[@]}"; do
             dotnet test "$test_project" \
               --configuration Release \
               --logger "trx" \
@@ -83,8 +89,9 @@ jobs:
           done
 
           report_count="$(find ./TestResults -type f -name 'coverage.opencover.xml' | wc -l)"
-          if [ "$report_count" -eq 0 ]; then
-            echo "No OpenCover coverage reports were generated." >&2
+          expected_report_count="${#test_projects[@]}"
+          if [ "$report_count" -ne "$expected_report_count" ]; then
+            echo "Expected $expected_report_count OpenCover coverage reports, found $report_count." >&2
             exit 1
           fi
 
