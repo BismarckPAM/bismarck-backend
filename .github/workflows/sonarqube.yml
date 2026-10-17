@@ -71,8 +71,8 @@ jobs:
 
       # 8. Run tests, generate OpenCover XML reports, and output TRX test results
       - name: Run Tests & Collect Coverage
-        continue-on-error: true # Ensures scan still uploads even if an assertion fails
         run: |
+          set -euo pipefail
           find . -type f -name '*Tests.csproj' -print0 | while IFS= read -r -d '' test_project; do
             dotnet test "$test_project" \
               --configuration Release \
@@ -81,6 +81,18 @@ jobs:
               --results-directory ./TestResults \
               -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
           done
+
+          report_count="$(find ./TestResults -type f -name 'coverage.opencover.xml' | wc -l)"
+          if [ "$report_count" -eq 0 ]; then
+            echo "No OpenCover coverage reports were generated." >&2
+            exit 1
+          fi
+
+          trx_count="$(find ./TestResults -type f -name '*.trx' | wc -l)"
+          if [ "$trx_count" -eq 0 ]; then
+            echo "No TRX test reports were generated." >&2
+            exit 1
+          fi
 
       # 9. End SonarQube Scan (Uploads coverage and code metrics to your EC2 instance)
       - name: End SonarQube Analysis
