@@ -10,6 +10,7 @@ using Resource.Service.Services;
 using Resource.Service.Validators;
 using ResourceModel = Resource.Service.Models.Resource;
 using Messaging;
+using Moq;
 
 namespace Resource.Service.Tests.Services;
 
@@ -90,6 +91,61 @@ public class ResourceServiceTests
         Assert.Equal("resource-created", published.EventType);
         Assert.Equal(result.Id, published.EntityId);
     }
+
+    [Theory]
+    [InlineData(ResourceCriticality.LOW)]
+    [InlineData(ResourceCriticality.MEDIUM)]
+    [InlineData(ResourceCriticality.HIGH)]
+    [InlineData(ResourceCriticality.CRITICAL)]
+    public async Task CreateAsync_WithEachSupportedCriticality_PersistsCriticality(ResourceCriticality criticality)
+    {
+        using var dbContext = CreateDbContext(Guid.NewGuid().ToString());
+        var service = new ResourceService(dbContext, _mapper, _createValidator, _updateValidator);
+
+        var result = await service.CreateAsync(new CreateResourceRequest
+        {
+            Name = "Criticality test resource",
+            Type = "Service",
+            Owner = "Platform",
+            Environment = "Test",
+            Criticality = criticality
+        });
+
+        Assert.Equal(criticality, result.Criticality);
+    }
+
+    [Fact]
+    public async Task CreateAsync_UsesPublisherTestDoubleToPublishExpectedEvent()
+    {
+        using var dbContext = CreateDbContext(Guid.NewGuid().ToString());
+        var publisher = new Mock<IDomainEventPublisher>();
+        publisher
+            .Setup(p => p.PublishAsync(
+                It.IsAny<string>(),
+                It.IsAny<SecurityEvent<object>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var service = new ResourceService(dbContext, _mapper, _createValidator, _updateValidator, publisher.Object);
+
+        var result = await service.CreateAsync(new CreateResourceRequest
+        {
+            Name = "Mocked publisher resource",
+            Type = "Service",
+            Owner = "Platform",
+            Environment = "Test",
+            Criticality = ResourceCriticality.MEDIUM
+        });
+
+        publisher.Verify(p => p.PublishAsync(
+            "resource-events",
+            It.Is<SecurityEvent<object>>(eventMessage =>
+                eventMessage.EventType == "resource-created"
+                && eventMessage.Resource == result.Id.ToString()
+                && eventMessage.Action == "RESOURCE_CREATE"
+                && eventMessage.Outcome == "SUCCESS"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task CreateAsync_WithInvalidRequest_ThrowsValidationException()
     {
@@ -107,6 +163,15 @@ public class ResourceServiceTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(invalidRequest));
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithNullRequest_ThrowsValidationException()
+    {
+        using var dbContext = CreateDbContext(Guid.NewGuid().ToString());
+        var service = new ResourceService(dbContext, _mapper, _createValidator, _updateValidator);
+
+        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(null!));
     }
 
     [Fact]
@@ -315,6 +380,15 @@ public class ResourceServiceTests
 
         // Act & Assert
         await Assert.ThrowsAsync<NotFoundException>(() => service.UpdateAsync(Guid.NewGuid(), updateRequest));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WithNullRequest_ThrowsValidationException()
+    {
+        using var dbContext = CreateDbContext(Guid.NewGuid().ToString());
+        var service = new ResourceService(dbContext, _mapper, _createValidator, _updateValidator);
+
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(Guid.NewGuid(), null!));
     }
 
     [Fact]
