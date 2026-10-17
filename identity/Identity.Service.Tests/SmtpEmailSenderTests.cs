@@ -14,6 +14,7 @@ public sealed class SmtpEmailSenderTests
             new ConfigurationBuilder().Build(),
             NullLogger<SmtpEmailSender>.Instance);
 
+        Assert.NotNull(sender);
         await sender.SendActivationEmailAsync("user@example.com", "User", "temporary-password");
         await sender.SendRejectionEmailAsync("user@example.com", "User", null);
         await sender.SendRejectionEmailAsync("user@example.com", "User", "Reason");

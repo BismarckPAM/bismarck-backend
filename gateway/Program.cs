@@ -125,4 +125,4 @@ app.MapMetrics("/metrics");
 // Existing routes plus new protected monitoring routes.
 app.MapReverseProxy();
 
-app.Run();
+await app.RunAsync();

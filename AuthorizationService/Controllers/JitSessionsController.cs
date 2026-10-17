@@ -36,15 +36,6 @@ public sealed class JitSessionsController(
         return GetSessions(activeOnly, null, null, cancellationToken);
     }
 
-    [NonAction]
-    public Task<IActionResult> Revoke(
-        Guid id,
-        RevokeJitSessionRequest? request,
-        CancellationToken cancellationToken)
-    {
-        return Revoke(id, request, null, null, cancellationToken);
-    }
-
     /// <summary>
     /// Roles allowed to enumerate every JIT session and to revoke any of them.
     /// A Security Admin is deliberately NOT an approver — that authority stays
@@ -80,6 +71,15 @@ public sealed class JitSessionsController(
             .ToListAsync(cancellationToken);
 
         return Ok(permissions.Select(p => ToResponse(p, now)).ToList());
+    }
+
+    [NonAction]
+    public Task<IActionResult> Revoke(
+        Guid id,
+        RevokeJitSessionRequest? request,
+        CancellationToken cancellationToken)
+    {
+        return Revoke(id, request, null, null, cancellationToken);
     }
 
     [HttpPost("{id:guid}/revoke")]

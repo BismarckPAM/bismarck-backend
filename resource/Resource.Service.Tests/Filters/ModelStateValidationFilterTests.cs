@@ -39,10 +39,12 @@ public sealed class ModelStateValidationFilterTests
     {
         var valid = CreateContext();
         new ModelStateValidationFilter().OnActionExecuting(valid);
+        Assert.True(valid.ModelState.IsValid);
 
         var required = CreateContext();
         required.ModelState.AddModelError("request", "request body is required");
         new ModelStateValidationFilter().OnActionExecuting(required);
+        Assert.False(required.ModelState.IsValid);
     }
 
     private static ActionExecutingContext CreateContext() =>
