@@ -89,7 +89,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: qa/playwright
+        working-directory: Peformance_and_e2e_Tests/playwright
     env:
       FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
       API_URL: ${{ secrets.E2E_API_URL }}
@@ -99,7 +99,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: qa/playwright/package-lock.json
+          cache-dependency-path: Peformance_and_e2e_Tests/playwright/package-lock.json
       - name: Install Playwright
         run: |
           npm ci
@@ -115,8 +115,8 @@ jobs:
         with:
           name: se3112-playwright-public
           path: |
-            qa/playwright/playwright-report/
-            qa/playwright/test-results/
+            Peformance_and_e2e_Tests/playwright/playwright-report/
+            Peformance_and_e2e_Tests/playwright/test-results/
           retention-days: 3
           if-no-files-found: ignore
 
@@ -130,7 +130,7 @@ jobs:
     environment: se3112-test
     defaults:
       run:
-        working-directory: qa/playwright
+        working-directory: Peformance_and_e2e_Tests/playwright
     env:
       FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
       API_URL: ${{ secrets.E2E_API_URL }}
@@ -150,7 +150,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: qa/playwright/package-lock.json
+          cache-dependency-path: Peformance_and_e2e_Tests/playwright/package-lock.json
       - name: Check prerequisites (never echo credentials)
         run: |
           for key in FRONTEND_URL API_URL E2E_DEV_EMAIL E2E_DEV_PASSWORD E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_OTHER_EMAIL E2E_OTHER_PASSWORD E2E_RESOURCE_ID; do
@@ -168,8 +168,8 @@ jobs:
         with:
           name: se3112-playwright-private
           path: |
-            qa/playwright/playwright-report/
-            qa/playwright/test-results/
+            Peformance_and_e2e_Tests/playwright/playwright-report/
+            Peformance_and_e2e_Tests/playwright/test-results/
           retention-days: 1
           if-no-files-found: ignore
 
@@ -202,14 +202,14 @@ jobs:
           test -n "$BASE_URL" && test -n "$ACCESS_TOKEN" || { echo 'Missing K6_BASE_URL or K6_ACCESS_TOKEN'; exit 1; }
       - name: Run threshold-gated baseline
         run: |
-          mkdir -p qa/k6/results
-          k6 run --summary-export qa/k6/results/ci-summary.json qa/k6/tests/advanced.test.js
+          mkdir -p Peformance_and_e2e_Tests/k6/results
+          k6 run --summary-export Peformance_and_e2e_Tests/k6/results/ci-summary.json Peformance_and_e2e_Tests/k6/tests/advanced.test.js
       - name: Upload k6 threshold summary
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: se3112-k6-summary
-          path: qa/k6/results/ci-summary.json
+          path: Peformance_and_e2e_Tests/k6/results/ci-summary.json
           retention-days: 7
           if-no-files-found: ignore
 
@@ -303,3 +303,4 @@ jobs:
           for outcome in "$FULL_E2E_RESULT" "$K6_RESULT"; do
             if [[ "$outcome" != 'success' && "$outcome" != 'skipped' ]]; then echo 'An opted-in job failed'; exit 1; fi
           done
+
