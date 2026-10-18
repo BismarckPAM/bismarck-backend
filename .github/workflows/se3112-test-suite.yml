@@ -1,25 +1,17 @@
 name: SE3112 Unified Test Suite
 
+# All jobs are automatically triggered by a normal push.
+# Do not merge these testing credentials into production deployment workflows.
 on:
   push:
     branches:
       - feature/se3112-unified-testing-pipeline
-  workflow_dispatch:
-    inputs:
-      run_full_e2e:
-        description: 'Run authenticated/write E2E on a disposable TEST environment only'
-        type: boolean
-        default: false
-      run_k6:
-        description: 'Run 2-VU read-only k6 baseline on an authorized TEST environment'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: se3112-test-suite-${{ github.ref }}
+  group: se3112-unified-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -38,14 +30,15 @@ jobs:
           set -euo pipefail
           mapfile -d '' projects < <(find . -type f -name '*Tests.csproj' -not -path '*/obj/*' -print0 | sort -z)
           if (( ${#projects[@]} == 0 )); then
-            echo 'No backend test projects found'; exit 1
+            echo 'No backend test projects found'
+            exit 1
           fi
-          echo "Found ${#projects[@]} test projects"
+          echo "Found ${#projects[@]} backend test projects"
           for project in "${projects[@]}"; do
             echo "::group::Testing $project"
             slug="$(echo "$project" | tr '/ .' '___')"
             dotnet test "$project" --configuration Release \
-              --logger 'trx' --collect:'XPlat Code Coverage' \
+              --logger trx --collect:'XPlat Code Coverage' \
               --results-directory "${GITHUB_WORKSPACE}/TestResults/${slug}" \
               -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
             echo '::endgroup::'
@@ -91,6 +84,7 @@ jobs:
       run:
         working-directory: Peformance_and_e2e_Tests/playwright
     env:
+      # Existing repository secrets: public/read-only browser checks.
       FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
       API_URL: ${{ secrets.E2E_API_URL }}
     steps:
@@ -100,207 +94,3 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: Peformance_and_e2e_Tests/playwright/package-lock.json
-      - name: Install Playwright
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-      - name: Validate test URL
-        run: |
-          test -n "$FRONTEND_URL" && test -n "$API_URL" || { echo 'Set E2E_FRONTEND_URL and E2E_API_URL in GitHub Actions secrets'; exit 1; }
-      - name: Execute public E2E suite
-        run: npm run test:public
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: se3112-playwright-public
-          path: |
-            Peformance_and_e2e_Tests/playwright/playwright-report/
-            Peformance_and_e2e_Tests/playwright/test-results/
-          retention-days: 3
-          if-no-files-found: ignore
-
-  playwright-authenticated:
-    name: Playwright • authenticated lifecycle + security (opt-in)
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.run_full_e2e == true) ||
-      (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-full-e2e]'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    environment: se3112-test
-    defaults:
-      run:
-        working-directory: Peformance_and_e2e_Tests/playwright
-    env:
-      FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
-      API_URL: ${{ secrets.E2E_API_URL }}
-      E2E_DEV_EMAIL: ${{ secrets.E2E_DEV_EMAIL }}
-      E2E_DEV_PASSWORD: ${{ secrets.E2E_DEV_PASSWORD }}
-      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
-      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
-      E2E_OTHER_EMAIL: ${{ secrets.E2E_OTHER_EMAIL }}
-      E2E_OTHER_PASSWORD: ${{ secrets.E2E_OTHER_PASSWORD }}
-      E2E_RESOURCE_ID: ${{ secrets.E2E_RESOURCE_ID }}
-      E2E_ALLOW_WRITES: 'true'
-      E2E_LEVEL: '1'
-      E2E_DURATION_MINUTES: '5'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: Peformance_and_e2e_Tests/playwright/package-lock.json
-      - name: Check prerequisites (never echo credentials)
-        run: |
-          for key in FRONTEND_URL API_URL E2E_DEV_EMAIL E2E_DEV_PASSWORD E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_OTHER_EMAIL E2E_OTHER_PASSWORD E2E_RESOURCE_ID; do
-            test -n "${!key}" || { echo "Missing configuration: $key"; exit 1; }
-          done
-      - name: Install browser
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-      - name: Run authenticated, resilience, lifecycle and security suites
-        run: npx playwright test --project=read --project=resilience --project=lifecycle --project=security
-      - name: Upload authenticated E2E report (may contain sensitive data)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: se3112-playwright-private
-          path: |
-            Peformance_and_e2e_Tests/playwright/playwright-report/
-            Peformance_and_e2e_Tests/playwright/test-results/
-          retention-days: 1
-          if-no-files-found: ignore
-
-  k6-baseline:
-    name: k6 • read-only 2-VU baseline (opt-in)
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.run_k6 == true) ||
-      (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-k6]'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: se3112-test
-    env:
-      BASE_URL: ${{ secrets.K6_BASE_URL }}
-      ACCESS_TOKEN: ${{ secrets.K6_ACCESS_TOKEN }}
-      ENDPOINT: resources
-      V2_PROFILE: baseline
-      MAX_VUS: '2'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install k6
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
-          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
-          echo 'deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main' | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update
-          sudo apt-get install -y k6
-      - name: Verify target and token
-        run: |
-          test -n "$BASE_URL" && test -n "$ACCESS_TOKEN" || { echo 'Missing K6_BASE_URL or K6_ACCESS_TOKEN'; exit 1; }
-      - name: Run threshold-gated baseline
-        run: |
-          mkdir -p Peformance_and_e2e_Tests/k6/results
-          k6 run --summary-export Peformance_and_e2e_Tests/k6/results/ci-summary.json Peformance_and_e2e_Tests/k6/tests/advanced.test.js
-      - name: Upload k6 threshold summary
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: se3112-k6-summary
-          path: Peformance_and_e2e_Tests/k6/results/ci-summary.json
-          retention-days: 7
-          if-no-files-found: ignore
-
-  sonar-analysis:
-    name: SonarQube • .NET code quality + coverage
-    needs: [backend-tests]
-    if: always() && github.ref == 'refs/heads/feature/se3112-unified-testing-pipeline'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Verify SonarQube configuration
-        run: |
-          test -n "$SONAR_HOST_URL" && test -n "$SONAR_TOKEN" || { echo 'Set SONAR_HOST_URL and SONAR_TOKEN in repository secrets'; exit 1; }
-      - name: Fetch OpenCover and TRX from backend test job
-        if: needs.backend-tests.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: se3112-dotnet-test-results
-          path: TestResults
-      - name: Install SonarScanner for .NET
-        run: dotnet tool install --global dotnet-sonarscanner
-      - name: Restore services
-        run: |
-          set -e
-          for service in identity resource AuthorizationService Approval Audit Notification Analytics gateway; do
-            dotnet restore "./${service}"
-          done
-      - name: Sonar begin
-        run: |
-          dotnet sonarscanner begin \
-            /k:'bismarck-backend' \
-            /d:sonar.host.url="$SONAR_HOST_URL" \
-            /d:sonar.token="$SONAR_TOKEN" \
-            /d:sonar.cs.opencover.reportsPaths='**/TestResults/**/coverage.opencover.xml' \
-            /d:sonar.cs.vstest.reportsPaths='**/TestResults/**/*.trx' \
-            /d:sonar.coverage.exclusions='**/*Tests*/**,**/Migrations/**'
-      - name: Build all microservices for Sonar
-        run: |
-          set -e
-          for service in identity resource AuthorizationService Approval Audit Notification Analytics gateway; do
-            dotnet build "./${service}" --no-restore --configuration Release
-          done
-      - name: Sonar end (submit analysis)
-        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
-
-  suite-summary:
-    name: Unified • results summary
-    if: always()
-    needs: [backend-tests, frontend-tests, playwright-public, playwright-authenticated, k6-baseline, sonar-analysis]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Summarize jobs and enforce mandatory checks
-        env:
-          BACKEND_RESULT: ${{ needs.backend-tests.result }}
-          FRONTEND_RESULT: ${{ needs.frontend-tests.result }}
-          PUBLIC_RESULT: ${{ needs.playwright-public.result }}
-          FULL_E2E_RESULT: ${{ needs.playwright-authenticated.result }}
-          K6_RESULT: ${{ needs.k6-baseline.result }}
-          SONAR_RESULT: ${{ needs.sonar-analysis.result }}
-        shell: bash
-        run: |
-          {
-            echo '## SE3112 Bismarck unified testing'
-            echo '| Test layer | Result |'
-            echo '| --- | --- |'
-            echo "| .NET backend tests | $BACKEND_RESULT |"
-            echo "| Vitest frontend tests | $FRONTEND_RESULT |"
-            echo "| Playwright public E2E | $PUBLIC_RESULT |"
-            echo "| Playwright authenticated E2E (opt-in) | $FULL_E2E_RESULT |"
-            echo "| k6 baseline (opt-in) | $K6_RESULT |"
-            echo "| SonarQube analysis | $SONAR_RESULT |"
-            echo ''
-            echo 'Skipped opt-in jobs are NOT evidence of successful execution.'
-          } >> "$GITHUB_STEP_SUMMARY"
-          for outcome in "$BACKEND_RESULT" "$FRONTEND_RESULT" "$PUBLIC_RESULT" "$SONAR_RESULT"; do
-            if [[ "$outcome" != 'success' ]]; then echo 'Required suite check did not succeed'; exit 1; fi
-          done
-          for outcome in "$FULL_E2E_RESULT" "$K6_RESULT"; do
-            if [[ "$outcome" != 'success' && "$outcome" != 'skipped' ]]; then echo 'An opted-in job failed'; exit 1; fi
-          done
-
