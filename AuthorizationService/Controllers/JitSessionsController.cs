@@ -28,6 +28,13 @@ public sealed class JitSessionsController(
     IAuthorizationEventPublisher eventPublisher,
     ISystemClock clock) : ControllerBase
 {
+    /// <summary>
+    /// Roles allowed to enumerate every JIT session and to revoke any of them.
+    /// A Security Admin is deliberately NOT an approver — that authority stays
+    /// with the Approval Service's configured approver roles.
+    /// </summary>
+    private static readonly string[] PrivilegedRoles = ["Admin", "Security Admin"];
+
     [NonAction]
     public Task<ActionResult<IReadOnlyList<JitSessionResponse>>> GetSessions(
         bool activeOnly,
@@ -35,22 +42,6 @@ public sealed class JitSessionsController(
     {
         return GetSessions(activeOnly, null, null, cancellationToken);
     }
-
-    [NonAction]
-    public Task<IActionResult> Revoke(
-        Guid id,
-        RevokeJitSessionRequest? request,
-        CancellationToken cancellationToken)
-    {
-        return Revoke(id, request, null, null, cancellationToken);
-    }
-
-    /// <summary>
-    /// Roles allowed to enumerate every JIT session and to revoke any of them.
-    /// A Security Admin is deliberately NOT an approver — that authority stays
-    /// with the Approval Service's configured approver roles.
-    /// </summary>
-    private static readonly string[] PrivilegedRoles = ["Admin", "Security Admin"];
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<JitSessionResponse>>> GetSessions(
@@ -80,6 +71,15 @@ public sealed class JitSessionsController(
             .ToListAsync(cancellationToken);
 
         return Ok(permissions.Select(p => ToResponse(p, now)).ToList());
+    }
+
+    [NonAction]
+    public Task<IActionResult> Revoke(
+        Guid id,
+        RevokeJitSessionRequest? request,
+        CancellationToken cancellationToken)
+    {
+        return Revoke(id, request, null, null, cancellationToken);
     }
 
     [HttpPost("{id:guid}/revoke")]
