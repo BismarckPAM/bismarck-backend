@@ -311,12 +311,9 @@ jobs:
           test -n "$SONAR_HOST_URL" && test -n "$SONAR_TOKEN" || {
             echo 'Missing SONAR_HOST_URL or SONAR_TOKEN'; exit 1;
           }
-      - name: Download coverage artifact
-        if: needs.backend-tests.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: se3112-dotnet-test-results
-          path: TestResults
+      # The backend-tests job still uploads its coverage artifact independently.
+      # SonarScanner must instrument the test project builds inside its own
+      # begin/end session to discover all test modules and map coverage reliably.
       - name: Install SonarScanner
         run: dotnet tool install --global dotnet-sonarscanner
       - name: Restore service dependencies
@@ -340,6 +337,33 @@ jobs:
           for service in identity resource AuthorizationService Approval Audit Notification Analytics gateway; do
             dotnet build "./${service}" --no-restore --configuration Release
           done
+      - name: Run all .NET tests inside SonarScanner session
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p TestResults
+          mapfile -d '' projects < <(find . -type f -name '*Tests.csproj' -print0 | sort -z)
+          if [ "${#projects[@]}" -eq 0 ]; then
+            echo 'ERROR: No .NET test projects found'
+            exit 1
+          fi
+          echo "Discovered ${#projects[@]} test projects for SonarQube"
+          for project in "${projects[@]}"; do
+            echo "Testing ${project}"
+            dotnet test "$project" \
+              --configuration Release \
+              --logger trx \
+              --collect:'XPlat Code Coverage' \
+              --results-directory ./TestResults \
+              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+          done
+          n_reports="$(find TestResults -type f -name 'coverage.opencover.xml' | wc -l)"
+          n_trx="$(find TestResults -type f -name '*.trx' | wc -l)"
+          echo "Produced $n_reports OpenCover files and $n_trx TRX test reports"
+          if [ "$n_reports" -lt "${#projects[@]}" ] || [ "$n_trx" -lt "${#projects[@]}" ]; then
+            echo 'ERROR: Coverage or TRX files are missing for one or more projects'
+            exit 1
+          fi
       - name: Sonar end
         run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 
