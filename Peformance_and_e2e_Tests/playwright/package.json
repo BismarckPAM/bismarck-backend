@@ -1,0 +1,24 @@
+{
+  "name": "bismarck-se3112-advanced-e2e",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:public": "playwright test --project=public",
+    "test:read": "playwright test --project=read",
+    "test:lifecycle": "playwright test --project=lifecycle",
+    "test:resilience": "playwright test --project=resilience",
+    "test:security": "playwright test --project=security",
+    "test:demo": "playwright test --project=lifecycle --grep E2E-40 --headed",
+    "test:list": "playwright test --list",
+    "typecheck": "tsc --noEmit",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.0",
+    "@types/node": "22.15.0",
+    "dotenv": "17.2.3",
+    "typescript": "5.9.3"
+  }
+}
