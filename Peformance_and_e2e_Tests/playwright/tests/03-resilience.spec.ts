@@ -41,10 +41,58 @@ test('E2E-33 [controlled] network failure renders a recoverable error, not a suc
   await expect(dev.page.getByRole('table', { name: 'Privileged Resources' })).toHaveCount(0);
 });
 
+
 test('E2E-34 [controlled] API 401 clears all session fields and returns to login', async ({ dev }) => {
-  await dev.page.route('**/api/resources', route => route.fulfill({ status: 401, contentType: 'application/json', body: '{"message":"Unauthorized"}' }));
-  await dev.page.goto('/resources');
-  await expect(dev.page).toHaveURL(/\/login$/);
-  expect(await dev.page.evaluate(() => ['bismarck_pam_token', 'bismarck_pam_user', 'bismarck_pam_expires_at'].map(k => localStorage.getItem(k)))).toEqual([null, null, null]);
-  await expect(dev.page.getByTestId('logout-btn')).toHaveCount(0);
+  const page = dev.page;
+
+  await page.route('**/api/resources', route =>
+    route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: '{"message":"Unauthorized"}',
+    })
+  );
+
+  await page.goto('/resources');
+
+  // Verify the user was redirected to login.
+  await expect(page).toHaveURL(/\/login(?:[?#]|$)/);
+
+  // Ensure the login screen is rendered.
+  await expect(
+    page.getByRole('button', { name: 'Authenticate & Enter' })
+  ).toBeVisible();
+
+  // Navigation can replace the JavaScript execution context.
+  // Retry transient navigation errors, but keep the assertion strict.
+  await expect.poll(
+    async () => {
+      try {
+        return await page.evaluate(() =>
+          [
+            'bismarck_pam_token',
+            'bismarck_pam_user',
+            'bismarck_pam_expires_at',
+          ].map(key => localStorage.getItem(key))
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          /execution context was destroyed|because of a navigation/i.test(error.message)
+        ) {
+          return ['navigation-in-progress'];
+        }
+
+        throw error;
+      }
+    },
+    {
+      timeout: 15000,
+      intervals: [250, 500, 1000],
+    }
+  ).toEqual([null, null, null]);
+
+  // Authenticated navigation must no longer be available.
+  await expect(page.getByTestId('logout-btn')).toHaveCount(0);
 });
+
