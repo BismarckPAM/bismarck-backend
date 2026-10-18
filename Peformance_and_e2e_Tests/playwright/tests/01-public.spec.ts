@@ -3,15 +3,28 @@ import { urls } from '../support/config.js';
 
 test.beforeEach(() => { urls(); });
 
-test('E2E-01 public landing loads successfully and login link works', async ({ page }) => {
+
+test('E2E-01 public landing loads successfully and login navigation works', async ({ page }) => {
   const response = await page.goto('/');
+
   expect(response?.status()).toBe(200);
+
   await expect(page.locator('body')).toContainText(/Bismarck/i);
-  // Click the actual link rather than jumping directly to the destination.
-  await page.locator('a[href="/login"]').first().click();
+
+  // The real landing page uses a button with React Router navigation.
+  const loginButton = page.getByRole('navigation', { name: 'Main' })
+    .getByRole('button', { name: 'Login' });
+
+  await expect(loginButton).toBeVisible();
+  await loginButton.click();
+
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole('button', { name: 'Authenticate & Enter' })).toBeVisible();
+
+  await expect(
+    page.getByRole('button', { name: 'Authenticate & Enter' })
+  ).toBeVisible();
 });
+
 
 test('E2E-02 login exposes labelled inputs and password visibility works both ways', async ({ page }) => {
   await page.goto('/login');
