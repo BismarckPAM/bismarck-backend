@@ -94,3 +94,313 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: Peformance_and_e2e_Tests/playwright/package-lock.json
+      - name: Check public test URLs
+        shell: bash
+        run: |
+          test -n "$FRONTEND_URL" && test -n "$API_URL" || {
+            echo 'Missing E2E_FRONTEND_URL or E2E_API_URL repository secret'
+            exit 1
+          }
+      - name: Install Playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Execute public browser checks
+        run: npm run test:public
+      - name: Upload Playwright public report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: se3112-playwright-public
+          path: |
+            Peformance_and_e2e_Tests/playwright/playwright-report/
+            Peformance_and_e2e_Tests/playwright/test-results/
+          retention-days: 3
+          if-no-files-found: ignore
+
+  playwright-authenticated:
+    name: Playwright • authenticated lifecycle + security
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: se3112-test
+    defaults:
+      run:
+        working-directory: Peformance_and_e2e_Tests/playwright
+    env:
+      # Environment secrets MUST target an independent staging application and database.
+      FRONTEND_URL: ${{ secrets.E2E_TEST_FRONTEND_URL }}
+      API_URL: ${{ secrets.E2E_TEST_API_URL }}
+      PRODUCTION_FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
+      PRODUCTION_API_URL: ${{ secrets.E2E_API_URL }}
+      TEST_DB_ISOLATED: ${{ vars.SE3112_TEST_DB_ISOLATED }}
+      E2E_DEV_EMAIL: ${{ secrets.E2E_DEV_EMAIL }}
+      E2E_DEV_PASSWORD: ${{ secrets.E2E_DEV_PASSWORD }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_OTHER_EMAIL: ${{ secrets.E2E_OTHER_EMAIL }}
+      E2E_OTHER_PASSWORD: ${{ secrets.E2E_OTHER_PASSWORD }}
+      E2E_RESOURCE_ID: ${{ secrets.E2E_RESOURCE_ID }}
+      E2E_ALLOW_WRITES: 'true'
+      E2E_LEVEL: '1'
+      E2E_DURATION_MINUTES: '5'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse production or unconfirmed test targets
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlsplit
+
+          def host_of(var):
+              raw = os.environ.get(var, '').strip()
+              if not raw:
+                  sys.exit(f'Missing {var}; configure a dedicated staging/test deployment.')
+              parsed = urlsplit(raw)
+              if (parsed.scheme != 'https' or not parsed.hostname or
+                  parsed.username or parsed.password or parsed.path not in ('', '/') or
+                  parsed.query or parsed.fragment):
+                  sys.exit(f'{var} must be a plain HTTPS base URL with no credentials or path.')
+              return parsed.hostname.lower().rstrip('.')
+
+          forbidden = {
+              'frontend-ui.mangopond-f3cfcd27.southeastasia.azurecontainerapps.io',
+              'gateway.mangopond-f3cfcd27.southeastasia.azurecontainerapps.io',
+          }
+          for key in ('PRODUCTION_FRONTEND_URL', 'PRODUCTION_API_URL'):
+              if os.environ.get(key, '').strip():
+                  forbidden.add(host_of(key))
+          for key in ('FRONTEND_URL', 'API_URL'):
+              if host_of(key) in forbidden:
+                  sys.exit(f'{key} points to a known production host; refusing write E2E tests.')
+          if os.environ.get('TEST_DB_ISOLATED') != 'true':
+              sys.exit('Set SE3112_TEST_DB_ISOLATED=true in environment variables ONLY after confirming independent staging databases and no production cloud permissions.')
+          if host_of('FRONTEND_URL') == host_of('API_URL'):
+              sys.exit('Expected separate staging frontend and API hosts. Review deployment URLs.')
+          print('Staging hosts differ from known production hosts; isolation confirmed by configured test-environment attestation.')
+          PY
+      - name: Check E2E account and resource configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in E2E_DEV_EMAIL E2E_DEV_PASSWORD E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_OTHER_EMAIL E2E_OTHER_PASSWORD E2E_RESOURCE_ID; do
+            test -n "${!key}" || { echo "Missing environment secret: $key"; exit 1; }
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Peformance_and_e2e_Tests/playwright/package-lock.json
+      - name: Install Playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run read, resilience, lifecycle and security suites
+        run: npx playwright test --project=read --project=resilience --project=lifecycle --project=security
+      - name: Upload authenticated Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: se3112-playwright-private
+          path: |
+            Peformance_and_e2e_Tests/playwright/playwright-report/
+            Peformance_and_e2e_Tests/playwright/test-results/
+          retention-days: 1
+          if-no-files-found: ignore
+
+  k6-baseline:
+    name: k6 • automatic authenticated read-only baseline (2 VUs)
+    # Keep performance checks out of the browser E2E measurement window.
+    needs: [playwright-authenticated]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: se3112-test
+    env:
+      BASE_URL: ${{ secrets.K6_BASE_URL }}
+      STAGING_API_URL: ${{ secrets.E2E_TEST_API_URL }}
+      PRODUCTION_API_URL: ${{ secrets.E2E_API_URL }}
+      TEST_DB_ISOLATED: ${{ vars.SE3112_TEST_DB_ISOLATED }}
+      K6_EMAIL: ${{ secrets.K6_EMAIL }}
+      K6_PASSWORD: ${{ secrets.K6_PASSWORD }}
+      ENDPOINT: resources
+      V2_PROFILE: baseline
+      MAX_VUS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated performance target
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlsplit
+          def host_of(name):
+              url = os.environ.get(name, '').strip()
+              if not url:
+                  sys.exit(f'Missing {name}; configure the staging gateway URL.')
+              parsed = urlsplit(url)
+              if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or
+                  parsed.password or parsed.path not in ('', '/') or parsed.query or parsed.fragment):
+                  sys.exit(f'Invalid {name}: expected a plain HTTPS origin.')
+              return parsed.hostname.lower().rstrip('.')
+          actual = host_of('BASE_URL')
+          staging = host_of('STAGING_API_URL')
+          forbidden = {'gateway.mangopond-f3cfcd27.southeastasia.azurecontainerapps.io'}
+          if os.environ.get('PRODUCTION_API_URL', '').strip():
+              forbidden.add(host_of('PRODUCTION_API_URL'))
+          if actual in forbidden or staging in forbidden or actual != staging:
+              sys.exit('k6 must target the same isolated staging API configured for authenticated E2E, never production.')
+          if os.environ.get('TEST_DB_ISOLATED') != 'true':
+              sys.exit('SE3112_TEST_DB_ISOLATED=true must confirm staging has independent databases before tests run.')
+          print('k6 staging URL safety check passed.')
+          PY
+      - name: Obtain fresh test JWT (never printed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$K6_EMAIL" && test -n "$K6_PASSWORD" || {
+            echo 'Missing K6_EMAIL or K6_PASSWORD environment secrets'
+            exit 1
+          }
+          payload="$(jq -nc --arg email "$K6_EMAIL" --arg password "$K6_PASSWORD" '{email:$email,password:$password}')"
+          response="$(curl --fail-with-body -fsS --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/json' \
+            -X POST "${BASE_URL%/}/api/identity/auth/login" \
+            --data "$payload" 2>/dev/null)" || {
+              echo 'Test account authentication failed or staging API is unavailable'
+              exit 1
+            }
+          token="$(jq -er '.token' <<< "$response")" || {
+            echo 'Identity login did not return a JWT token'
+            exit 1
+          }
+          echo "::add-mask::$token"
+          echo "ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
+      - name: Install k6
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo 'deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main' | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+      - name: Execute threshold-gated k6 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p Peformance_and_e2e_Tests/k6/results
+          k6 run \
+            --summary-export Peformance_and_e2e_Tests/k6/results/ci-summary.json \
+            Peformance_and_e2e_Tests/k6/tests/advanced.test.js
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: se3112-k6-summary
+          path: Peformance_and_e2e_Tests/k6/results/ci-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  sonar-analysis:
+    name: SonarQube • .NET code quality + coverage
+    needs: [backend-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify SonarQube configuration
+        run: |
+          test -n "$SONAR_HOST_URL" && test -n "$SONAR_TOKEN" || {
+            echo 'Missing SONAR_HOST_URL or SONAR_TOKEN repository secrets'
+            exit 1
+          }
+      - name: Fetch OpenCover and TRX from backend tests
+        if: needs.backend-tests.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: se3112-dotnet-test-results
+          path: TestResults
+      - name: Install SonarScanner
+        run: dotnet tool install --global dotnet-sonarscanner
+      - name: Restore services
+        run: |
+          set -e
+          for service in identity resource AuthorizationService Approval Audit Notification Analytics gateway; do
+            dotnet restore "./${service}"
+          done
+      - name: Sonar begin
+        run: |
+          dotnet sonarscanner begin \
+            /k:'bismarck-backend' \
+            /d:sonar.host.url="$SONAR_HOST_URL" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.cs.opencover.reportsPaths='**/TestResults/**/coverage.opencover.xml' \
+            /d:sonar.cs.vstest.reportsPaths='**/TestResults/**/*.trx' \
+            /d:sonar.coverage.exclusions='**/*Tests*/**,**/Migrations/**'
+      - name: Build all microservices for Sonar
+        run: |
+          set -e
+          for service in identity resource AuthorizationService Approval Audit Notification Analytics gateway; do
+            dotnet build "./${service}" --no-restore --configuration Release
+          done
+      - name: Sonar end
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+  suite-summary:
+    name: Unified • results summary
+    if: always()
+    needs:
+      - backend-tests
+      - frontend-tests
+      - playwright-public
+      - playwright-authenticated
+      - k6-baseline
+      - sonar-analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report all layers and require every job to pass
+        shell: bash
+        env:
+          BACKEND_RESULT: ${{ needs.backend-tests.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-tests.result }}
+          PUBLIC_RESULT: ${{ needs.playwright-public.result }}
+          FULL_E2E_RESULT: ${{ needs.playwright-authenticated.result }}
+          K6_RESULT: ${{ needs.k6-baseline.result }}
+          SONAR_RESULT: ${{ needs.sonar-analysis.result }}
+        run: |
+          {
+            echo '## SE3112 Bismarck unified testing'
+            echo '| Test layer | Result |'
+            echo '| --- | --- |'
+            echo "| Backend tests and coverage | $BACKEND_RESULT |"
+            echo "| Frontend Vitest and build | $FRONTEND_RESULT |"
+            echo "| Playwright public E2E | $PUBLIC_RESULT |"
+            echo "| Playwright authenticated E2E | $FULL_E2E_RESULT |"
+            echo "| k6 read-only baseline | $K6_RESULT |"
+            echo "| SonarQube analysis | $SONAR_RESULT |"
+            echo ''
+            echo 'Every job must pass. Missing or unsafe staging configuration is a failure, not a silent skip.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          for result in "$BACKEND_RESULT" "$FRONTEND_RESULT" "$PUBLIC_RESULT" "$FULL_E2E_RESULT" "$K6_RESULT" "$SONAR_RESULT"; do
+            if [[ "$result" != 'success' ]]; then
+              echo 'At least one required quality check did not succeed.'
+              exit 1
+            fi
+          done
