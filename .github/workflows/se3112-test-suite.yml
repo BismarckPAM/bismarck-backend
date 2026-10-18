@@ -1,3 +1,259 @@
+name: SE3112 Unified Test Suite
+
+# CI-only testing for Bismarck's existing deployment.
+# Only a whitelisted subset of lifecycle tests may create test requests.
+# Do not use this workflow to exercise real JIT grants or revocations in production.
+on:
+  push:
+    branches:
+      - feature/se3112-unified-testing-pipeline
+
+permissions:
+  contents: read
+
+concurrency:
+  group: se3112-test-suite-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  backend-tests:
+    name: Backend • .NET tests + coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Discover and run backend test projects
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' projects < <(find . -type f -name '*Tests.csproj' -not -path '*/obj/*' -print0 | sort -z)
+          if (( ${#projects[@]} == 0 )); then
+            echo 'No backend test projects found'; exit 1
+          fi
+          echo "Found ${#projects[@]} backend test projects"
+          for project in "${projects[@]}"; do
+            echo "::group::Testing $project"
+            slug="$(echo "$project" | tr '/ .' '___')"
+            dotnet test "$project" --configuration Release \
+              --logger trx --collect:'XPlat Code Coverage' \
+              --results-directory "${GITHUB_WORKSPACE}/TestResults/${slug}" \
+              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+            echo '::endgroup::'
+          done
+      - name: Upload .NET test results and OpenCover files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: se3112-dotnet-test-results
+          path: TestResults/
+          retention-days: 7
+          if-no-files-found: warn
+
+  frontend-tests:
+    name: Frontend • Vitest + lint + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout frontend source
+        uses: actions/checkout@v4
+        with:
+          repository: BismarckPAM/bismarck-frontend
+          ref: deploy/production
+          path: bismarck-frontend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: bismarck-frontend/package-lock.json
+      - name: Install and verify
+        working-directory: bismarck-frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run test:run
+          npm run build
+
+  playwright-public:
+    name: Playwright • public browser checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: Peformance_and_e2e_Tests/playwright
+    env:
+      FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
+      API_URL: ${{ secrets.E2E_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Peformance_and_e2e_Tests/playwright/package-lock.json
+      - name: Check URLs
+        shell: bash
+        run: |
+          test -n "$FRONTEND_URL" && test -n "$API_URL" || {
+            echo 'Missing E2E_FRONTEND_URL or E2E_API_URL repository secret'; exit 1;
+          }
+      - name: Install Playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run public tests
+        run: npm run test:public
+      - name: Upload public Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: se3112-playwright-public
+          path: |
+            Peformance_and_e2e_Tests/playwright/playwright-report/
+            Peformance_and_e2e_Tests/playwright/test-results/
+          retention-days: 3
+          if-no-files-found: ignore
+
+  playwright-authenticated:
+    name: Playwright • authenticated + controlled test requests (no JIT grants)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: se3112-test
+    defaults:
+      run:
+        working-directory: Peformance_and_e2e_Tests/playwright
+    env:
+      FRONTEND_URL: ${{ secrets.E2E_FRONTEND_URL }}
+      API_URL: ${{ secrets.E2E_API_URL }}
+      E2E_DEV_EMAIL: ${{ secrets.E2E_DEV_EMAIL }}
+      E2E_DEV_PASSWORD: ${{ secrets.E2E_DEV_PASSWORD }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_OTHER_EMAIL: ${{ secrets.E2E_OTHER_EMAIL }}
+      E2E_OTHER_PASSWORD: ${{ secrets.E2E_OTHER_PASSWORD }}
+      E2E_RESOURCE_ID: ${{ secrets.E2E_RESOURCE_ID }}
+      E2E_ALLOW_WRITES: 'true'
+      E2E_LEVEL: '1'
+      E2E_DURATION_MINUTES: '5'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate known application hosts and test credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in FRONTEND_URL API_URL E2E_DEV_EMAIL E2E_DEV_PASSWORD E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_RESOURCE_ID; do
+            test -n "${!key}" || { echo "Missing environment/repository secret: $key"; exit 1; }
+          done
+          python3 - <<'PY'
+          import os, sys, uuid
+          from urllib.parse import urlsplit
+          allowed = {
+              'FRONTEND_URL': 'frontend-ui.mangopond-f3cfcd27.southeastasia.azurecontainerapps.io',
+              'API_URL': 'gateway.mangopond-f3cfcd27.southeastasia.azurecontainerapps.io',
+          }
+          for name, hostname in allowed.items():
+              u = urlsplit(os.environ[name])
+              if (u.scheme != 'https' or u.hostname != hostname or u.username or u.password or
+                      u.path not in ('', '/') or u.query or u.fragment):
+                  sys.exit(f'{name} must be the expected Bismarck HTTPS origin')
+          try:
+              uuid.UUID(os.environ['E2E_RESOURCE_ID'])
+          except ValueError:
+              sys.exit('E2E_RESOURCE_ID must be a valid UUID')
+          print('Expected frontend/gateway hosts and test resource UUID verified.')
+          PY
+      - name: Verify dedicated non-VM test resource through the real API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+          api = os.environ['API_URL'].rstrip('/')
+          data = json.dumps({'email':os.environ['E2E_DEV_EMAIL'], 'password':os.environ['E2E_DEV_PASSWORD']}).encode()
+          req = urllib.request.Request(api + '/api/identity/auth/login', data=data, headers={'Content-Type':'application/json'}, method='POST')
+          try:
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  login = json.load(response)
+              token = login.get('token')
+              if not token: sys.exit('Test developer login did not return a token')
+              req = urllib.request.Request(api + '/api/resources', headers={'Authorization':'Bearer ' + token}, method='GET')
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  resources = json.load(response)
+          except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
+              sys.exit('Test account login/resource lookup failed: ' + type(e).__name__)
+          resource = next((r for r in resources if str(r.get('id','')).lower() == os.environ['E2E_RESOURCE_ID'].lower()), None)
+          if resource is None: sys.exit('E2E_RESOURCE_ID is not present in the resource inventory')
+          if (not str(resource.get('name','')).upper().startswith('SE3112-') or
+                  str(resource.get('environment','')).upper() != 'TESTING' or
+                  str(resource.get('type','')).upper() == 'VM' or
+                  any(resource.get(field) for field in ('azureVmName','azureResourceGroup','azureResourceId','publicHost'))):
+              sys.exit('Refusing write tests: resource must be named SE3112-*, tagged TESTING, non-VM, and have no Azure/cloud host target')
+          print('Dedicated TESTING/non-VM resource verified; no VM or cloud target detected.')
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Peformance_and_e2e_Tests/playwright/package-lock.json
+      - name: Install Playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run authenticated read, resilience, and allowlisted request-only tests
+        # E2E-42,46,47 create PENDING test requests; fixture rejects them in teardown.
+        # E2E-40,41,43-45 and all security tests are excluded, not silently passed.
+        run: |
+          npx playwright test \
+            --project=read --project=resilience --project=lifecycle \
+            --grep 'E2E-(1[0-9]|2[0-4]|3[0-4]|42|46|47)(\.| )'
+      - name: Upload authenticated Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: se3112-playwright-authenticated-limited
+          path: |
+            Peformance_and_e2e_Tests/playwright/playwright-report/
+            Peformance_and_e2e_Tests/playwright/test-results/
+          retention-days: 1
+          if-no-files-found: ignore
+
+  k6-baseline:
+    name: k6 • production read-only 2-VU baseline (existing JWT)
+    needs: [playwright-authenticated]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: se3112-test
+    env:
+      BASE_URL: ${{ secrets.K6_BASE_URL }}
+      ACCESS_TOKEN: ${{ secrets.K6_ACCESS_TOKEN }}
+      API_URL: ${{ secrets.E2E_API_URL }}
+      ENDPOINT: resources
+      V2_PROFILE: baseline
+      MAX_VUS: '2'
+      THINK_TIME_SECONDS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate authorized read-only performance target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BASE_URL" && test -n "$ACCESS_TOKEN" && test -n "$API_URL" || {
+            echo 'Missing K6_BASE_URL, K6_ACCESS_TOKEN or E2E_API_URL'; exit 1;
+          }
+          python3 - <<'PY'
+          import os, sys
+          from urllib.parse import urlsplit
+          allowed = 'gateway.mangopond-f3cfcd27.southeastasia.azurecontainerapps.io'
+          for key in ('BASE_URL','API_URL'):
+              u = urlsplit(os.environ[key])
+              if u.scheme != 'https' or u.hostname != allowed or u.path not in ('','/') or u.query or u.fragment or u.username or u.password:
+                  sys.exit(f'{key} must target the configured Bismarck API gateway HTTPS origin')
+          print('Target allowlist passed; running GET /api/resources only, at 2 VUs.')
+          PY
+          status="$(curl -sS --connect-timeout 10 --max-time 20 \
             -o /dev/null -w '%{http_code}' \
             -H "Authorization: Bearer $ACCESS_TOKEN" "${BASE_URL%/}/api/resources")"
           if [ "$status" != '200' ]; then
