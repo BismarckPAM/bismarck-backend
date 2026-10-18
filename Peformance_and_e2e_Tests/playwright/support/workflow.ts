@@ -7,8 +7,8 @@ import { asyncTimeout, writeConfig } from './config.js';
 export class Workflow {
   readonly marker = `SE3112-E2E-${randomUUID()}`;
   readonly config = writeConfig();
-  private submittedReasons = new Set<string>();
-  constructor(readonly dev: Actor, readonly admin: Actor, private info: TestInfo) {}
+  private readonly submittedReasons = new Set<string>();
+  constructor(readonly dev: Actor, readonly admin: Actor, private readonly info: TestInfo) {}
 
   async fill(reason = `${this.marker} validate temporary access to the dedicated test resource.`, duration = this.config.duration) {
     await this.dev.page.goto('/request-access');

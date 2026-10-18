@@ -276,7 +276,7 @@ jobs:
           set -euo pipefail
           mkdir -p Peformance_and_e2e_Tests/k6/results
           k6 run --summary-export Peformance_and_e2e_Tests/k6/results/ci-summary.json \
-            Peformance_and_e2e_Tests/k6/tests/advanced.test.js
+            Peformance_and_e2e_Tests/k6/tests/advanced.k6.js
       - name: Upload k6 threshold summary
         if: always()
         uses: actions/upload-artifact@v4
@@ -330,7 +330,7 @@ jobs:
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.cs.opencover.reportsPaths='**/TestResults/**/coverage.opencover.xml' \
             /d:sonar.cs.vstest.reportsPaths='**/TestResults/**/*.trx' \
-            /d:sonar.coverage.exclusions='**/*Tests*/**,**/Migrations/**,**/Program.cs,**/*DbContextFactory.cs,**/DTOs/**,**/DomainEventMessage.cs,**/Services/*Kafka*.cs,**/Services/*Consumer.cs,**/Services/SshTerminalSession.cs,**/Services/SmtpEmailSender.cs,**/Clients/**,**/Services/CloudflareTurnstileVerifier.cs,**/Services/AzureJitProvisioner.cs,**/Services/IAzureJitProvisioner.cs,**/Services/JitTerminalBroker.cs,**/Controllers/JitTerminalController.cs'
+            /d:sonar.coverage.exclusions='**/*Tests*/**,**/Migrations/**,**/Program.cs,**/*DbContextFactory.cs,**/DTOs/**,**/DomainEventMessage.cs,**/Services/*Kafka*.cs,**/Services/*Consumer.cs,**/Services/SshTerminalSession.cs,**/Services/SmtpEmailSender.cs,**/Clients/**,**/Services/CloudflareTurnstileVerifier.cs,**/Services/AzureJitProvisioner.cs,**/Services/IAzureJitProvisioner.cs,**/Services/JitTerminalBroker.cs,**/Controllers/JitTerminalController.cs,Peformance_and_e2e_Tests/k6/**/*.js'
       - name: Build all services for SonarQube
         run: |
           set -e

@@ -16,7 +16,7 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 $prefix=Join-Path $out "v2-$Endpoint-$Profile-$stamp"
 Write-Host "V2 | endpoint=$Endpoint profile=$Profile maxVUs=$VUs | target=$env:BASE_URL"
-& k6 run --summary-export "$prefix-summary.json" --out "json=$prefix-raw.json" (Join-Path $root 'tests/advanced.test.js')
+& k6 run --summary-export "$prefix-summary.json" --out "json=$prefix-raw.json" (Join-Path $root 'tests/advanced.k6.js')
 $code=$LASTEXITCODE
 if (Test-Path "$prefix-summary.json") {
   & python (Join-Path $root 'scripts/report-v2.py') "$prefix-summary.json" "$prefix-raw.json"

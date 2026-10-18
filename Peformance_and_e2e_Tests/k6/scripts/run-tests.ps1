@@ -9,6 +9,6 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 $prefix=Join-Path $out "$Test-$stamp"
 Write-Host "Running $Test against $env:BASE_URL (review safe load limits before proceeding)"
-& k6 run --summary-export "$prefix-summary.json" --out "json=$prefix-raw.json" (Join-Path $root "tests/$Test.test.js")
+& k6 run --summary-export "$prefix-summary.json" --out "json=$prefix-raw.json" (Join-Path $root "tests/$Test.k6.js")
 if ($LASTEXITCODE -ne 0) { Write-Warning "k6 exited with $LASTEXITCODE (threshold failed, connectivity or test error). Check output."; exit $LASTEXITCODE }
 Write-Host "Saved: $prefix-summary.json and $prefix-raw.json"

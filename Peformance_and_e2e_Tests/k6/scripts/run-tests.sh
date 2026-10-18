@@ -8,4 +8,4 @@ if [[ "$TEST" != smoke ]]; then : "${ACCESS_TOKEN:?Set ACCESS_TOKEN to a valid t
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$ROOT/results"
 PREFIX="$ROOT/results/${TEST}-$(date +%Y%m%d-%H%M%S)"
-k6 run --summary-export "${PREFIX}-summary.json" --out "json=${PREFIX}-raw.json" "$ROOT/tests/${TEST}.test.js"
+k6 run --summary-export "${PREFIX}-summary.json" --out "json=${PREFIX}-raw.json" "$ROOT/tests/${TEST}.k6.js"
