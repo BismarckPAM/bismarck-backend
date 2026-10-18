@@ -45,4 +45,23 @@ public class AuthenticationTests
         Assert.Equal("Admin", claims.Single(claim => claim.Type == ClaimTypes.Role).Value);
         Assert.True(expiresAt > DateTime.UtcNow);
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void TokenServiceRejectsMissingSigningKey(string? signingKey)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { ["JwtSettings:SigningKey"] = signingKey }).Build();
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "person@example.com",
+            Role = new Role { Name = "User" }
+        };
+
+        Assert.Throws<InvalidOperationException>(
+            () => new TokenService(configuration).CreateToken(user));
+    }
 }
