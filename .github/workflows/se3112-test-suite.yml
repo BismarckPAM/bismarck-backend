@@ -78,7 +78,7 @@ jobs:
 
   playwright-public:
     name: Playwright • public browser checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -118,7 +118,7 @@ jobs:
 
   playwright-authenticated:
     name: Playwright • authenticated + controlled test requests (no JIT grants)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     environment: se3112-test
     defaults:
