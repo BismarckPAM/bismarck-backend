@@ -2,6 +2,7 @@
 
 ## Unit test coverage
 
+
 The resource service unit tests use xUnit parameterized cases and Moq test doubles
 to isolate service behavior from event publishing. Run them with the enforced
 line-coverage threshold:
