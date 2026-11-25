@@ -1,6 +1,5 @@
 # bismarck-backend
 
-
 ## Unit test coverage
 
 The resource service unit tests use xUnit parameterized cases and Moq test doubles
