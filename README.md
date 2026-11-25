@@ -6,6 +6,7 @@ The resource service unit tests use xUnit parameterized cases and Moq test doubl
 to isolate service behavior from event publishing. Run them with the enforced
 line-coverage threshold:
 
+
 ```bash
 dotnet test resource/Resource.Service.Tests/Resource.Service.Tests.csproj \
   --configuration Release \
